@@ -16,7 +16,7 @@ from ColorHelper import MplColorHelper
 
 windowname = 'OpenCvFrame'
 cv.namedWindow(windowname)
-cv.moveWindow(windowname,0,00)
+cv.moveWindow(windowname,0,40)
 
 
 class Tracker(object):
@@ -150,12 +150,12 @@ class Tracker(object):
 
         return img
 
-    def draw_flow(self,imgs,flow, step=8):
+    def draw_flow(self,imgs,flow, step=10):
 
                 h, w = imgs.shape[:2]
                 y, x = np.mgrid[step / 2:h:step, step / 2:w:step].reshape(2, -1).astype(int)
                 fx, fy = flow[y, x].T
-                print(fx,fy)
+                
                 lines = np.vstack([x, y, x + fx, y + fy]).T.reshape(-1, 2, 2)
                 lines = np.int32(lines + 0.5)
                 vis = cv.cvtColor(imgs, cv.COLOR_GRAY2BGR)
@@ -211,7 +211,7 @@ class Tracker(object):
     def showFlow(self,create_gif=False,name="clouds.gif",nbr_imgs=0):
         img_list = []
         flow = None 
-
+        scale = 0.6
         if create_gif: 
             folder = "GIF/"
             if not os.path.exists(folder):
@@ -221,7 +221,14 @@ class Tracker(object):
             if len(img_list) == 0:
                 mask = np.zeros_like(img)
 
-
+            h,w = img.shape[:2]
+            img = cv.resize(img,(int(w * scale),int(h * scale)))
+            img = cv.resize(img,(w,h))
+            print(img.shape)
+            #cv.imshow(windowname,img)
+            #if cv.waitKey(25) & 0XFF == ord('q'):
+            #    break
+            #continue
             cloudlist = self.sequentialLabeling(img)
             clouds = self.getClouds(cloudlist,img)
 
@@ -244,12 +251,49 @@ class Tracker(object):
                 continue
             
             flow = self.calcFlow(img_list[0][0],img_list[1][0],pts)
-            
+            #print()
+
+
+            """
+                TEST
+                
+                Set everything to zero except biggest cloud
+            """
+
+
+            def average_movement(flow):
+                #flow = flow.astype(np.float32)
+                tmp = np.zeros(flow.shape)
+                for i in range(len(clouds)):
+                
+                    avg_len = np.sqrt( (flow[clouds[i].points]**2).sum(axis=1) ).sum(axis=0) / len(clouds[i].points[0])
+                    avg_direction = flow[clouds[i].points].sum(axis=0)  / len(clouds[i].points[0])
+                    avg_len *= 16
+                    avg_dir = (avg_direction**2).sum(0)
+                    if avg_dir == 0:
+                        print("DIR SMALL:",flow[clouds[i].points][:,0],flow[clouds[i].points][:,1],avg_dir)
+                        continue
+                    print(avg_direction)
+                    avg_direction = avg_direction * (avg_len / np.sqrt( avg_dir ) )
+
+                    tmp[clouds[i].points] = avg_direction
+                flow = tmp
+
+                return flow
+            flow = average_movement(flow)
             vis = self.draw_flow(mask,flow)
             mask = cv.cvtColor(vis,cv.COLOR_RGB2GRAY)
+
+
+
+
             frame = np.concatenate((img_list[0][0],mask),axis=1)
+
+
+
+
             
-            #cv.imshow(windowname,frame)
+            cv.imshow(windowname,frame)
             print(i,end="\r")
 
 
@@ -272,5 +316,5 @@ class Tracker(object):
 
 t = Tracker("../PNG")
 #t.showset()
-t.showFlow(create_gif=True,name="clouds_as_center_of_mass.gif")
+t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
 cv.destroyAllWindows()
