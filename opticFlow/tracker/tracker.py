@@ -155,13 +155,13 @@ class Tracker(object):
                 h, w = imgs.shape[:2]
                 y, x = np.mgrid[step / 2:h:step, step / 2:w:step].reshape(2, -1).astype(int)
                 fx, fy = flow[y, x].T
-                
                 lines = np.vstack([x, y, x + fx, y + fy]).T.reshape(-1, 2, 2)
+                #print(lines)
                 lines = np.int32(lines + 0.5)
                 vis = cv.cvtColor(imgs, cv.COLOR_GRAY2BGR)
                 cv.polylines(vis, lines, 0, (0, 255, 0))
-                for (x1, y1), (x2, y2) in lines:
-                    cv.circle(vis, (x1, y1), 1, (0, 255, 0), -1)
+                #for (x1, y1), (x2, y2) in lines:
+                #    cv.circle(vis, (x1, y1), 1, (255, 255, 0), -1)
                 return vis
 
     def calcFlow(self,img0,img1,prevPts=None,nextPts=None):
@@ -281,6 +281,7 @@ class Tracker(object):
 
                 return flow
             flow = average_movement(flow)
+
             vis = self.draw_flow(mask,flow)
             mask = cv.cvtColor(vis,cv.COLOR_RGB2GRAY)
 
