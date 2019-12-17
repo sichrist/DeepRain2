@@ -14,7 +14,8 @@ class Cloud():
         self.center_of_mass = int(np.sum(points[0])/len(points[0])),int(np.sum(points[1])/len(points[1]))
         self.min_x,self.max_x = points[0].min(),points[0].max()
         self.min_y,self.max_y = points[1].min(),points[1].max()  
-            
+        self.direction_vec = None
+
     def __lt__(self, other):
         return self.size < other.size
 
@@ -76,6 +77,21 @@ class Cloud():
         ret = np.array(self.points)
         x,y = ret.shape
         return ret.reshape(y,1,x)
+
+    def set_direction(self,dirv):
+        if self.direction_vec is None:
+            self.direction_vec = dirv
+        else:
+            # updaten
+            pass
+
+
+    def is_inPath(point):
+        
+        """
+
+        """
+
 
     def dist(self,cloud):
         """

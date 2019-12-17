@@ -206,7 +206,71 @@ class Tracker(object):
             delay, inputPath, finalDelay, loop,
             outputPath)
             print(cmd)
-            os.system(cmd)
+
+
+    def calcFlow_clouds(self,img1,img2):
+
+        """
+            
+            img1, img2 needs to be binary + maxcontrast
+
+        """
+
+
+        def average_movement(flow,clouds):
+                #flow = flow.astype(np.float32)
+                tmp = np.zeros(flow.shape)
+                for i in range(len(clouds)):
+                
+                    avg_len = np.sqrt( (flow[clouds[i].points]**2).sum(axis=1) ).sum(axis=0) / len(clouds[i].points[0])
+                    avg_direction = flow[clouds[i].points].sum(axis=0)  / len(clouds[i].points[0])
+                    avg_len *= 1
+                    avg_dir = (avg_direction**2).sum(0)
+                    if avg_dir == 0:
+                        continue
+                    avg_direction = avg_direction * (avg_len / np.sqrt( avg_dir ) )
+
+                    clouds[i].set_direction = avg_direction
+
+                    tmp[clouds[i].points] = avg_direction
+                flow = tmp
+
+                return flow
+
+
+        flow = self.calcFlow(img1,img2,None)
+
+        cloudlist1 = self.sequentialLabeling(img1)
+        cloudlist2 = self.sequentialLabeling(img2)
+
+        clouds1 = self.getClouds(cloudlist1,img1)
+        clouds2 = self.getClouds(cloudlist2,img2)
+        
+        print(img1.shape)
+        print(img2.shape)
+
+        flow = average_movement(flow,clouds1)
+        mask = np.zeros_like(img1)
+        vis = self.draw_flow(mask,flow)
+        img1 = cv.cvtColor(img1,cv.COLOR_GRAY2RGB)
+        img2 = cv.cvtColor(img2,cv.COLOR_GRAY2RGB)
+        frame = np.concatenate((img1,img2),axis=1)
+        frame = np.concatenate((frame,vis),axis=1)
+
+        h,w = frame.shape[:2]
+        h1,w1 = img1.shape[:2]
+        
+        frame[:,w1-1:w1+1,:] = [255,255,255]
+        scale = 0.5
+
+        frame = cv.resize(frame,(int(w * scale),int(h * scale)))
+        while True:
+            cv.imshow(windowname,frame)
+
+            if cv.waitKey(25) & 0XFF == ord('q'):
+                break
+
+
 
     def showFlow(self,create_gif=False,name="clouds.gif",nbr_imgs=0):
         img_list = []
@@ -222,8 +286,8 @@ class Tracker(object):
                 mask = np.zeros_like(img)
 
             h,w = img.shape[:2]
-            img = cv.resize(img,(int(w * scale),int(h * scale)))
-            img = cv.resize(img,(w,h))
+            #img = cv.resize(img,(int(w * scale),int(h * scale)))
+            #img = cv.resize(img,(w,h))
             print(img.shape)
             #cv.imshow(windowname,img)
             #if cv.waitKey(25) & 0XFF == ord('q'):
@@ -251,6 +315,7 @@ class Tracker(object):
                 continue
             
             flow = self.calcFlow(img_list[0][0],img_list[1][0],pts)
+
             #print()
 
 
@@ -283,13 +348,20 @@ class Tracker(object):
             flow = average_movement(flow)
 
             vis = self.draw_flow(mask,flow)
-            mask = cv.cvtColor(vis,cv.COLOR_RGB2GRAY)
+            
+            #mask = cv.cvtColor(vis,cv.COLOR_RGB2GRAY)
 
 
 
 
-            frame = np.concatenate((img_list[0][0],mask),axis=1)
+            #print("MAX:",img_list[0][0].max())
+            #frame = np.concatenate((img_list[0][0],mask),axis=1)
+            frame = cv.cvtColor(img_list[0][0],cv.COLOR_GRAY2RGB)
+            for c in clouds:
+                frame = c.paintcolor(frame)
+            frame = np.concatenate((frame,vis),axis=1)
 
+            print(frame.shape)
 
 
 
@@ -317,5 +389,8 @@ class Tracker(object):
 
 t = Tracker("../PNG")
 #t.showset()
-t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
+#t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
+img1 = t.data[0]
+img2 = t.data[2]
+t.calcFlow_clouds(img1,img2)
 cv.destroyAllWindows()
