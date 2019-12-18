@@ -149,7 +149,7 @@ class Tracker(object):
 
         return img
 
-    def draw_flow(self,imgs,flow, step=10):
+    def draw_flow(self,imgs,flow, step=2):
 
                 h, w = imgs.shape[:2]
                 y, x = np.mgrid[step / 2:h:step, step / 2:w:step].reshape(2, -1).astype(int)
@@ -441,7 +441,7 @@ if not os.path.exists(folder):
 
 img_old = t.data[0]
 
-for i in range(1,len(t.data)):
+for i in range(1,len(t.data),3):
     img = t.data[i]
     clouds = t.calcFlow_clouds(img_old,img)
 
@@ -459,5 +459,5 @@ for i in range(1,len(t.data)):
         break   
     img_old = img
 cv.destroyAllWindows()
-name = "path_direction.gif"
+name = "path_direction_max2.gif"
 t.create(folder,name,50,250,0)
