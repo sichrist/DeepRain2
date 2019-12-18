@@ -16,7 +16,7 @@ from ColorHelper import MplColorHelper
 
 windowname = 'OpenCvFrame'
 cv.namedWindow(windowname)
-cv.moveWindow(windowname,0,40)
+cv.moveWindow(windowname,2600,40)
 
 
 class Tracker(object):
@@ -37,7 +37,6 @@ class Tracker(object):
         if binary:
             self.data.binary()
     
-
     def label_To_index(self,label,img):
         return np.where(img == label)
 
@@ -209,7 +208,6 @@ class Tracker(object):
             outputPath)
             print(cmd)
 
-
     def calcFlow_clouds(self,img1,img2):
 
         """
@@ -271,7 +269,6 @@ class Tracker(object):
         """
 
         return clouds1
-
 
     def showFlow(self,create_gif=False,name="clouds.gif",nbr_imgs=0):
         img_list = []
@@ -389,13 +386,18 @@ class Tracker(object):
 
 
 t = Tracker("../PNG")
-t.showset()
+#t.showset()
 #t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
+
+"""
 img1 = t.data[0]
 img2 = t.data[1]
 
+print(img1.shape)
+print(img2.shape)
+
 print(np.where(img1 > 1))
-exit(0)
+
 clouds = t.calcFlow_clouds(img1,img2)
 
 
@@ -406,6 +408,7 @@ def predict(clouds,start_i,data,point_to_predict):
     while not a:
         
         for cloud in clouds:
+            print("HIER")
             a = cloud.is_inPath(point_to_predict)
             if a:
                 break
@@ -413,11 +416,48 @@ def predict(clouds,start_i,data,point_to_predict):
         #if ptp[0] > 3000:
         #    print("OUT OF LIMIT")
         #    break
-    print("WHAT",a)
+    #print("WHAT",a)
 
+img1 = cv.cvtColor(img1, cv.COLOR_GRAY2RGB)
+
+
+for cloud in clouds:
+    img1 = cloud.draw_hull( img1 )
+    img1 = cloud.draw_path(img1)
+
+while True:
+    cv.imshow(windowname,img1)
+    if cv.waitKey(25) & 0XFF == ord('q'):
+        break   
+cv.destroyAllWindows()
+exit(0)
 ptp = [338,690]
 predict(clouds,0,t.data,ptp)
+
+"""
+folder = "GIF/"
+if not os.path.exists(folder):
+    os.mkdir(folder)
+
+img_old = t.data[0]
+
+for i in range(1,len(t.data)):
+    img = t.data[i]
+    clouds = t.calcFlow_clouds(img_old,img)
+
+    img_old = cv.cvtColor(img_old, cv.COLOR_GRAY2RGB)
+    for cloud in clouds:
+        if cloud.size < 50:
+            continue
+        img_old = cloud.paintcolor(img_old)
+        img_old = cloud.draw_hull( img_old )
+        img_old = cloud.draw_path( img_old )
+    cv.imshow(windowname,img_old)
+    filename = "{0:0>5}".format(i)
+    cv.imwrite(os.path.join(folder,filename+".png"),img_old)
+    if cv.waitKey(25) & 0XFF == ord('q'):
+        break   
+    img_old = img
 cv.destroyAllWindows()
-
-
-
+name = "path_direction.gif"
+t.create(folder,name,50,250,0)

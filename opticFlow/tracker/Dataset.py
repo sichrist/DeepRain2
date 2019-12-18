@@ -39,8 +39,7 @@ class DataProvider(object):
 
     def max_contrast(self):
         self.transform.append(self.max_contrast_)
-
-        
+      
     def binary_(self,img,threshold=5):
         
         img[img > threshold ] = 255
@@ -85,8 +84,7 @@ class DataProvider(object):
             return self._openIMG(os.path.join(self.path,self.files[i]))
         else:
             return os.path.join(self.path,self.files[i])
-        
-        
+                
     def __len__(self):
         return len(self.files)
     

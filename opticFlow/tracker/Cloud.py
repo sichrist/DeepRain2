@@ -83,12 +83,11 @@ class Cloud():
 
         # self.pts == self.points as array not index_array
         self.pts = [[x,y] for x,y in zip(self.points[0],self.points[1])]
+        self.convex_hull_pts = None
         if len(self.pts) < 10:
             self.hull = None
         else:
             self.hull = ConvexHull(np.array(self.pts))
-
-
 
     def __lt__(self, other):
         return self.size < other.size
@@ -117,19 +116,19 @@ class Cloud():
 
         return img
 
-    def draw_hull(self,img):
+    def rearange(self,line):
+        x = []
+        y = []
+        for p in line:
+            x.append(p[0])
+            y.append(p[1])
+        return x,y
 
+    def calc_hull(self):
 
-        def rearange(line):
-            x = []
-            y = []
-            for p in line:
-                x.append(p[0])
-                y.append(p[1])
-            return x,y
 
         if self.hull is None:
-            return img
+            return 
         #pts = ( np.array(self.hull[0]),np.array(self.hull[1]))
 
         x = []
@@ -143,8 +142,8 @@ class Cloud():
                 j += 1
                 continue
             j = len(x)
-            print((x[j-1],y[j-1]),(x_,y_))
-            p0,p1 = rearange(get_line((x[j-1],y[j-1]),(x_,y_)))
+            #print((x[j-1],y[j-1]),(x_,y_))
+            p0,p1 = self.rearange(get_line((x[j-1],y[j-1]),(x_,y_)))
 
             x.extend(p0)
             y.extend(p1)
@@ -156,15 +155,24 @@ class Cloud():
 
 
         #print(self.hull)
-        p0,p1 = rearange(get_line((x[-1],y[-1]),(x[0],y[0])))
+        p0,p1 = self.rearange(get_line((x[-1],y[-1]),(x[0],y[0])))
         x.extend(p0)
         y.extend(p1)
         h_i = (np.array(x),np.array([y]))
         
 
         self.convex_hull_pts = h_i
+
+    def draw_hull(self,img):
+        
+        if self.hull is None:
+            return img
+        self.calc_hull()
+        
+
         if len(img.shape) == 3:
-            img[h_i] = [255,255,255]
+            
+            img[self.convex_hull_pts] = [255,255,255]
             cv.circle(img, 
                 (self.center_of_mass[1],self.center_of_mass[0]), 
                 5, 
@@ -172,11 +180,12 @@ class Cloud():
                 thickness=1, 
                 lineType=8, 
                 shift=0) 
-        
+
         else:
             img[h_i] = 255
 
         return img
+
 
 
     def bounding_box(self,img):
@@ -200,8 +209,7 @@ class Cloud():
         ret[self.max_x:self.max_x+40,self.max_y] = 255
 
         return ret
-    
-    
+        
     def bbox(self,img):
         return self.bounding_box(img)
     
@@ -215,12 +223,44 @@ class Cloud():
         return ret.reshape(y,1,x)
 
     def set_direction(self,dirv):
+        
         if self.direction_vec is None:
             self.direction_vec = dirv
+            
         else:
             # updaten
             pass
 
+    def draw_path(self,img):
+
+        self.direction_vec = self.direction_vec / np.sqrt(self.direction_vec**2 + self.direction_vec**2)
+        self.direction_vec *= 20
+        normal_vec = np.array([self.direction_vec[1],-self.direction_vec[0]])
+
+
+        com = np.array(self.center_of_mass,dtype=np.int32)
+        nom = np.array(normal_vec,dtype=np.int32)
+        div = np.array(self.direction_vec,dtype=np.int32)
+        #print("Center of mass  : ",com)
+        #print("NormalenVektor  : ",nom)
+        #print("Richtungsvektor : ",div)
+        #print("MULT: ",nom@div)
+
+        
+        p1_0,p1_1 = self.rearange(get_line(com,com+nom))
+        p2_0,p2_1 = self.rearange(get_line(com,com+div))
+        
+
+        p = (np.array(p1_0),np.array(p1_1))
+        n = (np.array(p2_0),np.array(p2_1))
+        
+        img[p] = [0,255,0]
+        img[n] = [0,0,255]
+
+
+        return img
+
+    
 
     def is_inPath(self,point,threshold = 5):
         
@@ -241,15 +281,13 @@ class Cloud():
             """
             t = (point - pts)  / self.direction_vec
             #if int(t[0]) == int(t[1]):
-            if t[0]+threshold > t[1] and t[0]-threshold < t[1] or t[1]+threshold > t[0] and t[1]-threshold < t[0]:
-                print("WAS")
-                print(t)
-                print("----")
-                return True
+            #if t[0]+threshold > t[1] and t[0]-threshold < t[1] or t[1]+threshold > t[0] and t[1]-threshold < t[0]:
+                #print("WAS")
+                #print(t)
+                #print("----")
+
+                #return True
         return False
-
-
-
 
     def dist(self,cloud):
         """
