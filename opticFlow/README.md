@@ -4,6 +4,7 @@
 
 #### Optischer Fuss 
     
+![Alt Text](animations/path_direction_max2.gif)
 
 ![Alt Text](animations/path_direction.gif)
 
