@@ -4,17 +4,7 @@
 
 #### Optischer Fuss 
     
-    -> probleme wenn Wolken Plötzlich verschwinden, weil sie abgeregnet haben.
-    -> Mögliche Lösung: stärke der Wolke beachten
+
+![Alt Text](animations/path_direction.gif)
 
 
-![Alt Text](animations/opticalFlow.gif)
-
-
-* Schwerpunkte der Wolken ändern sich kaum (Außer Wolken brechen auseinander)
-
-![Alt Text](animations/clouds.gif)
-
-
-
-![Alt Text](animations/maxContrast.gif)
