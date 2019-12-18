@@ -188,13 +188,15 @@ class Tracker(object):
         for i,img in enumerate(self.data):
             cloudlist = self.sequentialLabeling(img)
             clouds = self.getClouds(cloudlist,img)
-
+            img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
             for c in clouds:
-                img = c.bbox(img)
-            #img = self.mapToColor(img,cloudsize)
+                #img = c.bbox(img)
+                
+                img = c.draw_hull( img )
             show(img)
             if cv.waitKey(25) & 0XFF == ord('q'):
                 break
+            #img = self.mapToColor(img,cloudsize)
 
             
 
@@ -230,8 +232,7 @@ class Tracker(object):
                         continue
                     avg_direction = avg_direction * (avg_len / np.sqrt( avg_dir ) )
 
-                    clouds[i].set_direction = avg_direction
-
+                    clouds[i].set_direction(avg_direction)
                     tmp[clouds[i].points] = avg_direction
                 flow = tmp
 
@@ -245,9 +246,6 @@ class Tracker(object):
 
         clouds1 = self.getClouds(cloudlist1,img1)
         clouds2 = self.getClouds(cloudlist2,img2)
-        
-        print(img1.shape)
-        print(img2.shape)
 
         flow = average_movement(flow,clouds1)
         mask = np.zeros_like(img1)
@@ -263,13 +261,16 @@ class Tracker(object):
         frame[:,w1-1:w1+1,:] = [255,255,255]
         scale = 0.5
 
+        """
         frame = cv.resize(frame,(int(w * scale),int(h * scale)))
         while True:
             cv.imshow(windowname,frame)
 
             if cv.waitKey(25) & 0XFF == ord('q'):
                 break
+        """
 
+        return clouds1
 
 
     def showFlow(self,create_gif=False,name="clouds.gif",nbr_imgs=0):
@@ -388,9 +389,35 @@ class Tracker(object):
 
 
 t = Tracker("../PNG")
-#t.showset()
+t.showset()
 #t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
 img1 = t.data[0]
-img2 = t.data[2]
-t.calcFlow_clouds(img1,img2)
+img2 = t.data[1]
+
+print(np.where(img1 > 1))
+exit(0)
+clouds = t.calcFlow_clouds(img1,img2)
+
+
+
+def predict(clouds,start_i,data,point_to_predict):
+    
+    a = False
+    while not a:
+        
+        for cloud in clouds:
+            a = cloud.is_inPath(point_to_predict)
+            if a:
+                break
+        #ptp[0] += 1
+        #if ptp[0] > 3000:
+        #    print("OUT OF LIMIT")
+        #    break
+    print("WHAT",a)
+
+ptp = [338,690]
+predict(clouds,0,t.data,ptp)
 cv.destroyAllWindows()
+
+
+
