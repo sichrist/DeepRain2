@@ -11,6 +11,8 @@ def get_line(start, end):
         Stolen from http://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm
 
     """
+
+
     """Bresenham's Line Algorithm
     Produces a list of tuples from start and end
  
@@ -160,7 +162,7 @@ class Cloud():
         y.extend(p1)
         h_i = (np.array(x),np.array([y]))
         
-
+    
         self.convex_hull_pts = h_i
 
     def draw_hull(self,img):
@@ -233,7 +235,7 @@ class Cloud():
 
     def draw_path(self,img):
 
-        self.direction_vec = self.direction_vec / np.sqrt(self.direction_vec**2 + self.direction_vec**2)
+        self.direction_vec = self.direction_vec / np.sqrt(self.direction_vec[0]**2 + self.direction_vec[1]**2)
         self.direction_vec *= 20
         normal_vec = np.array([self.direction_vec[1],-self.direction_vec[0]])
 
@@ -241,12 +243,8 @@ class Cloud():
         com = np.array(self.center_of_mass,dtype=np.int32)
         nom = np.array(normal_vec,dtype=np.int32)
         div = np.array(self.direction_vec,dtype=np.int32)
-        #print("Center of mass  : ",com)
-        #print("NormalenVektor  : ",nom)
-        #print("Richtungsvektor : ",div)
-        #print("MULT: ",nom@div)
 
-        
+        # line of normal and direction vector
         p1_0,p1_1 = self.rearange(get_line(com,com+nom))
         p2_0,p2_1 = self.rearange(get_line(com,com+div))
         
@@ -258,6 +256,104 @@ class Cloud():
         img[n] = [0,0,255]
 
 
+        # find intersection between convex hull and normalvector
+
+        def intersection(point,anchor_point,vector):
+            """
+
+                point = anchor_point + (t * vector)
+                t = (point - anchor_point ) / vector
+
+
+            """
+
+            intersect = (point - anchor_point ) / vector
+            return intersect
+
+        
+        x,y = self.convex_hull_pts
+
+        
+        closest_point = []
+        for pt in zip(x,y[0]):
+            # dist
+            intersect = intersection(pt,com,nom)
+
+            t = np.abs(intersect[0] - intersect[1])
+            closest_point.append( (t,intersect,pt) )
+
+            
+        closest_point = sorted(closest_point, key=lambda tup:tup[0])
+        smallest_pos = None
+        smallest_neg = None
+
+
+        """
+            -> anchor point + t * direction
+
+            Find the two points which intersect the normalvector and are the furthest away from the center
+
+            the first point needs to have a positive t, the second a negative
+
+        """
+        for i,(x,y),t in closest_point:
+            sgn = np.sign(y)
+            if np.sign(x) != sgn:
+                continue
+
+            if sgn <= 0:
+                if smallest_neg == None:
+                    smallest_neg = (t,[x,y])
+
+                elif smallest_neg[0] > t:
+                    smallest_neg = (t,[x,y])
+
+            elif sgn > 0:
+                if smallest_pos == None:
+                    smallest_pos = (t,[x,y])
+
+                elif smallest_pos[0] > t:
+                    smallest_pos = (t,[x,y])
+        
+
+        
+        w,h = img.shape[:2]
+
+        dir_pos = smallest_pos[0]+(div * 100)
+        dir_neg = smallest_neg[0]+(div * 100)
+
+        direction_line = self.rearange(get_line(smallest_pos[0],dir_pos ))
+        direction_line_2 = self.rearange(get_line(smallest_neg[0],dir_neg ))
+
+
+        def boundary_check(line,w,h):
+            """
+
+                check if index of line overlap image boundaries
+
+
+            """
+
+
+            x = line[0]
+            y = line[1]
+            x = [j for j in x if j < w and j >= 0]
+            y = [j for j in y if j < h and j >= 0]
+            l_x = len(x)
+            l_y = len(y)
+
+            if l_x < l_y:
+                return (np.array(x),np.array(y[:l_x]))
+            return (np.array(x[:l_y]),np.array(y))
+            
+            
+        direction_line = boundary_check(direction_line,w,h)
+        direction_line_2 = boundary_check(direction_line_2,w,h)
+        #print(direction_line_2)
+
+        img[direction_line] = [255,255,0]
+        img[direction_line_2] = [255,255,0]
+
         return img
 
     
@@ -265,7 +361,7 @@ class Cloud():
     def is_inPath(self,point,threshold = 5):
         
         """
-            point = pt + t * direction
+            point = anchor point + t * direction
         """
         if self.direction_vec is None:
             return False

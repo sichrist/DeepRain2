@@ -12,7 +12,7 @@ import cv2 as cv
 from Dataset import DataProvider
 from Cloud import Cloud
 from ColorHelper import MplColorHelper
-
+from time import sleep 
 
 windowname = 'OpenCvFrame'
 cv.namedWindow(windowname)
@@ -25,7 +25,7 @@ class Tracker(object):
     docstring for Tracker
 
     """
-    def __init__(self, path,max_dist = 10,binary=True,max_contrast=True,transform=None):
+    def __init__(self, path,max_dist = 1,binary=True,max_contrast=True,transform=None):
         super(Tracker, self).__init__()
 
         self.path = path
@@ -115,6 +115,7 @@ class Tracker(object):
                 if elem in collision[elem]:
                     collision[elem].remove(elem)
 
+
         rearangeCollisions()
 
 
@@ -133,6 +134,12 @@ class Tracker(object):
             cloud_size.append((i,a))
         cloud_size = sorted(cloud_size, key=lambda x: x[1],reverse = True)
 
+        #img2 = img.copy()
+        #img2 = img2 * (255 /img2.max())
+        #cv.imshow("LABELING",img2.astype(np.uint8))
+        #cv.moveWindow("LABELING",0,40)
+
+        print("LABEL ::: ",label)
         return cloud_size
 
     def mapToColor(self,img,cloud_size):
@@ -171,7 +178,8 @@ class Tracker(object):
                                               nextPts,
                                               pyr_scale = 0.5, 
                                               levels = 5, 
-                                              winsize = 11, 
+                                              #winsize = 11, 
+                                              winsize = 5, 
                                               iterations = 5, 
                                               poly_n = 5, 
                                               poly_sigma = 1.1,
@@ -207,6 +215,7 @@ class Tracker(object):
             delay, inputPath, finalDelay, loop,
             outputPath)
             print(cmd)
+            os.system(cmd)
 
     def calcFlow_clouds(self,img1,img2):
 
@@ -218,8 +227,16 @@ class Tracker(object):
 
 
         def average_movement(flow,clouds):
-                #flow = flow.astype(np.float32)
+
+                """
+
+                    Average over all directions calculated by optic flow per cloud
+
+                """
+
+  
                 tmp = np.zeros(flow.shape)
+
                 for i in range(len(clouds)):
                 
                     avg_len = np.sqrt( (flow[clouds[i].points]**2).sum(axis=1) ).sum(axis=0) / len(clouds[i].points[0])
@@ -236,6 +253,85 @@ class Tracker(object):
 
                 return flow
 
+        def median_movement(flow,clouds):
+
+            def pol2cart(rho, phi):
+                """
+                    stolen from Stackoverflow
+
+                    https://stackoverflow.com/questions/20924085/python-conversion-between-coordinates
+
+                """
+                x = rho * np.cos(phi)
+                y = rho * np.sin(phi)
+                return(x, y)
+
+            def cart2pol(x, y):
+                """
+                    stolen from Stackoverflow
+
+                    https://stackoverflow.com/questions/20924085/python-conversion-between-coordinates
+                      
+                """
+                rho = np.sqrt(x**2 + y**2)
+                phi = np.arctan2(y, x)
+                return(rho, phi)
+
+            tmp = np.zeros(flow.shape)
+            for i in range(len(clouds)):
+                x,y = clouds[i].points
+                rho,phi = cart2pol(x,y)
+                carthesian = [[r,p] for r,p in zip(rho,phi)]
+
+                median = sorted(carthesian, key=lambda tup:tup[1])
+                median = median[len(median) // 2]
+
+                avg_direction = pol2cart(median[0],median[1])
+
+                clouds[i].set_direction(avg_direction)
+
+            return flow
+
+        def average_movement_normalized(flow,clouds):
+
+            def pol2cart(rho, phi):
+                """
+                    stolen from Stackoverflow
+
+                    https://stackoverflow.com/questions/20924085/python-conversion-between-coordinates
+
+                """
+                x = rho * np.cos(phi)
+                y = rho * np.sin(phi)
+                return(x, y)
+
+            def cart2pol(x, y):
+                """
+                    stolen from Stackoverflow
+
+                    https://stackoverflow.com/questions/20924085/python-conversion-between-coordinates
+                      
+                """
+                rho = np.sqrt(x**2 + y**2)
+                phi = np.arctan2(y, x)
+                return(rho, phi)
+
+
+            tmp = np.zeros(flow.shape)
+            for i in range(len(clouds)):
+                x,y = clouds[i].points
+                rho,phi = cart2pol(x,y)
+
+                carthesian = [[r,p] for r,p in zip(rho,phi)]
+                
+                carthesian = np.mean(np.array(carthesian),axis=0)                
+                avg_direction = pol2cart(carthesian[0],carthesian[1])
+
+                clouds[i].set_direction(avg_direction)
+
+
+            return flow
+
 
         flow = self.calcFlow(img1,img2,None)
 
@@ -245,7 +341,10 @@ class Tracker(object):
         clouds1 = self.getClouds(cloudlist1,img1)
         clouds2 = self.getClouds(cloudlist2,img2)
 
-        flow = average_movement(flow,clouds1)
+        #flow = average_movement(flow,clouds1)
+        #flow = median_movement(flow,clouds1)
+        flow = average_movement_normalized(flow,clouds1)
+
         mask = np.zeros_like(img1)
         vis = self.draw_flow(mask,flow)
         img1 = cv.cvtColor(img1,cv.COLOR_GRAY2RGB)
@@ -359,10 +458,7 @@ class Tracker(object):
                 frame = c.paintcolor(frame)
             frame = np.concatenate((frame,vis),axis=1)
 
-            print(frame.shape)
-
-
-
+            
             
             cv.imshow(windowname,frame)
             print(i,end="\r")
@@ -389,16 +485,29 @@ t = Tracker("../PNG")
 #t.showset()
 #t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
 
-"""
 img1 = t.data[0]
 img2 = t.data[1]
 
 print(img1.shape)
 print(img2.shape)
+"""
 
 print(np.where(img1 > 1))
 
 clouds = t.calcFlow_clouds(img1,img2)
+
+img1 = cv.cvtColor(img1, cv.COLOR_GRAY2RGB)
+
+
+for cloud in clouds:
+    img1 = cloud.draw_hull( img1 )
+    img1 = cloud.draw_path(img1)
+
+while True:
+    cv.imshow(windowname,img1)
+    if cv.waitKey(25) & 0XFF == ord('q'):
+        break   
+cv.destroyAllWindows()
 
 
 
@@ -418,46 +527,63 @@ def predict(clouds,start_i,data,point_to_predict):
         #    break
     #print("WHAT",a)
 
-img1 = cv.cvtColor(img1, cv.COLOR_GRAY2RGB)
 
-
-for cloud in clouds:
-    img1 = cloud.draw_hull( img1 )
-    img1 = cloud.draw_path(img1)
-
-while True:
-    cv.imshow(windowname,img1)
-    if cv.waitKey(25) & 0XFF == ord('q'):
-        break   
-cv.destroyAllWindows()
 exit(0)
 ptp = [338,690]
 predict(clouds,0,t.data,ptp)
 
 """
-folder = "GIF/"
-if not os.path.exists(folder):
-    os.mkdir(folder)
 
-img_old = t.data[0]
+def full():
+    folder = "GIF/"
+    if not os.path.exists(folder):
+        os.mkdir(folder)
 
-for i in range(1,len(t.data),3):
-    img = t.data[i]
-    clouds = t.calcFlow_clouds(img_old,img)
 
-    img_old = cv.cvtColor(img_old, cv.COLOR_GRAY2RGB)
-    for cloud in clouds:
-        if cloud.size < 50:
-            continue
-        img_old = cloud.paintcolor(img_old)
-        img_old = cloud.draw_hull( img_old )
-        img_old = cloud.draw_path( img_old )
-    cv.imshow(windowname,img_old)
-    filename = "{0:0>5}".format(i)
-    cv.imwrite(os.path.join(folder,filename+".png"),img_old)
-    if cv.waitKey(25) & 0XFF == ord('q'):
-        break   
-    img_old = img
-cv.destroyAllWindows()
-name = "path_direction_max2.gif"
-t.create(folder,name,50,250,0)
+
+    img_old = t.data[0]
+
+    for i in range(1,len(t.data),5):
+        img = t.data[i]
+        clouds = t.calcFlow_clouds(img_old,img)
+
+        img_old = cv.cvtColor(img_old, cv.COLOR_GRAY2RGB)
+        for j,cloud in enumerate(clouds):
+            if cloud.size < 90:
+                continue
+            img_old = cloud.paintcolor(img_old)
+            img_old = cloud.draw_hull( img_old )
+            img_old = cloud.draw_path( img_old )
+
+            if j > 5:
+                break
+
+        cv.imshow(windowname,img_old)
+        filename = "{0:0>5}".format(i)
+        print(filename)
+        cv.imwrite(os.path.join(folder,filename+".png"),img_old)
+
+        if cv.waitKey(25) & 0XFF == ord('q'):
+            break
+
+        img_old = img
+    cv.destroyAllWindows()
+    name = "path_direction_max2.gif"
+    t.create(folder,name,50,250,0)
+
+
+def show_label():
+
+    for img in t.data:
+        cloudlist = t.sequentialLabeling(img)
+        clouds = t.getClouds(cloudlist,img)
+        img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+        for c in clouds:
+            img = c.draw_hull( img )
+
+        cv.imshow(windowname,img)
+        if cv.waitKey(25) & 0XFF == ord('q'):
+            break   
+    cv.destroyAllWindows()
+
+show_label()
