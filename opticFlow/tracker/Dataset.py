@@ -42,6 +42,7 @@ class DataProvider(object):
       
     def binary_(self,img,threshold=5):
         
+        
         img[img > threshold ] = 255
         img[img <= threshold] = 0
         

@@ -15,8 +15,8 @@ from ColorHelper import MplColorHelper
 from time import sleep 
 
 windowname = 'OpenCvFrame'
-cv.namedWindow(windowname)
-cv.moveWindow(windowname,2600,40)
+#cv.namedWindow(windowname)
+#cv.moveWindow(windowname,2600,40)
 
 
 class Tracker(object):
@@ -25,23 +25,26 @@ class Tracker(object):
     docstring for Tracker
 
     """
-    def __init__(self, path,max_dist = 1,binary=True,max_contrast=True,transform=None):
+    def __init__(self, path=None,max_dist = 20,binary=True,max_contrast=True,transform=None):
         super(Tracker, self).__init__()
 
-        self.path = path
-        self.data = DataProvider(path)
+        if path is not None:
+            self.path = path
+            self.data = DataProvider(path)
+
+            if max_contrast:
+                self.data.max_contrast()
+            if binary:
+                self.data.binary()
         self.max_dist = max_dist
         self.threshold = 5
-        if max_contrast:
-            self.data.max_contrast()
-        if binary:
-            self.data.binary()
     
     def label_To_index(self,label,img):
+
         return np.where(img == label)
 
     def getClouds(self,cloudlist,img):
-        clouds = [Cloud(self.label_To_index(label,img)) for label,size in cloudlist]
+        clouds = [Cloud(idx) for label,size,idx in cloudlist]
         return clouds
 
     def sequentialLabeling(self,img):
@@ -56,14 +59,18 @@ class Tracker(object):
 
 
         """
-        
+        img = img.copy().astype(np.uint32)
         img[img >= self.threshold] = 1
+
+        true_value = img.max()
         x,y = np.where(img == 1)
+
+        print(img.dtype)
 
 
         collision = dict()
         label = 2
-
+        print(self.max_dist)
         for i,j in zip(x,y):
             i_X = slice(i-self.max_dist,i+self.max_dist)
             j_Y = slice(j-self.max_dist,j+self.max_dist)
@@ -79,7 +86,7 @@ class Tracker(object):
                 img[i_X,j_Y] = window
 
             elif len(neighbours) == 1:
-                window[window == 1] = window[neighbours[0,0],neighbours[0,1]]
+                window[window == true_value] = window[neighbours[0,0],neighbours[0,1]]
                 img[i_X,j_Y] = window
 
 
@@ -127,19 +134,19 @@ class Tracker(object):
         cloud_size = []
 
         for i in range(2,label):
-            a = len(np.where(img == i)[0])
+            idx = np.where(img == i)
+            a = len(idx[0])
 
             if a == 0:
                 continue
-            cloud_size.append((i,a))
+            cloud_size.append((i,a,idx))
         cloud_size = sorted(cloud_size, key=lambda x: x[1],reverse = True)
 
         #img2 = img.copy()
         #img2 = img2 * (255 /img2.max())
         #cv.imshow("LABELING",img2.astype(np.uint8))
         #cv.moveWindow("LABELING",0,40)
-
-        print("LABEL ::: ",label)
+        print("NBR LABEL: ",label)
         return cloud_size
 
     def mapToColor(self,img,cloud_size):
@@ -156,16 +163,16 @@ class Tracker(object):
 
         return img
 
-    def draw_flow(self,imgs,flow, step=2):
+    def draw_flow(self,imgs,flow, step=6):
 
                 h, w = imgs.shape[:2]
                 y, x = np.mgrid[step / 2:h:step, step / 2:w:step].reshape(2, -1).astype(int)
                 fx, fy = flow[y, x].T
                 lines = np.vstack([x, y, x + fx, y + fy]).T.reshape(-1, 2, 2)
-                #print(lines)
+                
                 lines = np.int32(lines + 0.5)
                 vis = cv.cvtColor(imgs, cv.COLOR_GRAY2BGR)
-                cv.polylines(vis, lines, 0, (0, 255, 0))
+                cv.polylines(vis, lines, 0, (255, 255, 255))
                 #for (x1, y1), (x2, y2) in lines:
                 #    cv.circle(vis, (x1, y1), 1, (255, 255, 0), -1)
                 return vis
@@ -247,6 +254,7 @@ class Tracker(object):
                         continue
                     avg_direction = avg_direction * (avg_len / np.sqrt( avg_dir ) )
 
+                    #avg_direction = [avg_direction[1],avg_direction[0]]
                     clouds[i].set_direction(avg_direction)
                     tmp[clouds[i].points] = avg_direction
                 flow = tmp
@@ -342,13 +350,15 @@ class Tracker(object):
         clouds2 = self.getClouds(cloudlist2,img2)
 
         #flow = average_movement(flow,clouds1)
-        #flow = median_movement(flow,clouds1)
-        flow = average_movement_normalized(flow,clouds1)
+        flow = median_movement(flow,clouds1)
+        #flow = average_movement_normalized(flow,clouds1)
 
+        """
         mask = np.zeros_like(img1)
         vis = self.draw_flow(mask,flow)
         img1 = cv.cvtColor(img1,cv.COLOR_GRAY2RGB)
         img2 = cv.cvtColor(img2,cv.COLOR_GRAY2RGB)
+
         frame = np.concatenate((img1,img2),axis=1)
         frame = np.concatenate((frame,vis),axis=1)
 
@@ -357,7 +367,7 @@ class Tracker(object):
         
         frame[:,w1-1:w1+1,:] = [255,255,255]
         scale = 0.5
-
+        """
         """
         frame = cv.resize(frame,(int(w * scale),int(h * scale)))
         while True:
@@ -366,8 +376,18 @@ class Tracker(object):
             if cv.waitKey(25) & 0XFF == ord('q'):
                 break
         """
-
+        #cv.imshow("BOING",vis)
         return clouds1
+
+
+
+
+    """
+     ---------- Everything below this line is for testing --------------
+
+    """
+
+
 
     def showFlow(self,create_gif=False,name="clouds.gif",nbr_imgs=0):
         img_list = []
@@ -385,7 +405,6 @@ class Tracker(object):
             h,w = img.shape[:2]
             #img = cv.resize(img,(int(w * scale),int(h * scale)))
             #img = cv.resize(img,(w,h))
-            print(img.shape)
             #cv.imshow(windowname,img)
             #if cv.waitKey(25) & 0XFF == ord('q'):
             #    break
@@ -475,13 +494,11 @@ class Tracker(object):
                     break
         if create_gif:
             self.create(folder,name,20,250,0)
-                
 
 
 
-
-
-t = Tracker("../PNG")
+"""
+t = Tracker("../PNG",max_dist=1)
 #t.showset()
 #t.showFlow(create_gif=False,name="clouds_as_center_of_mass.gif")
 
@@ -490,7 +507,6 @@ img2 = t.data[1]
 
 print(img1.shape)
 print(img2.shape)
-"""
 
 print(np.where(img1 > 1))
 
@@ -542,20 +558,23 @@ def full():
 
 
     img_old = t.data[0]
-
-    for i in range(1,len(t.data),5):
+    kernel = np.ones((3,3),np.uint8)
+    for i in range(1,len(t.data),3):
         img = t.data[i]
+        #img = cv.erode(img,kernel,iterations = 2)
+        img = cv.dilate(img,kernel,iterations = 1)
+        
         clouds = t.calcFlow_clouds(img_old,img)
 
         img_old = cv.cvtColor(img_old, cv.COLOR_GRAY2RGB)
         for j,cloud in enumerate(clouds):
-            if cloud.size < 90:
-                continue
-            img_old = cloud.paintcolor(img_old)
+            #if cloud.size < 10:
+                #continue
+            #img_old = cloud.paintcolor(img_old)
             img_old = cloud.draw_hull( img_old )
             img_old = cloud.draw_path( img_old )
 
-            if j > 5:
+            if j > 10:
                 break
 
         cv.imshow(windowname,img_old)
@@ -575,15 +594,40 @@ def full():
 def show_label():
 
     for img in t.data:
+        img_copy = img.copy()
+        img = img.astype(np.uint32)
         cloudlist = t.sequentialLabeling(img)
         clouds = t.getClouds(cloudlist,img)
-        img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+        img_copy = cv.cvtColor(img_copy, cv.COLOR_GRAY2RGB)
         for c in clouds:
-            img = c.draw_hull( img )
+            img_copy = c.draw_hull( img_copy )
+
+        cv.imshow(windowname,img_copy)
+        if cv.waitKey(25) & 0XFF == ord('q'):
+            break   
+    cv.destroyAllWindows()
+
+
+def oneCalc():
+    img_old = t.data[0]
+    img_new = t.data[9]
+
+    clouds = t.calcFlow_clouds(img_old,img_new)
+
+    for i,img in enumerate(t.data):
+        img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+        print("FRAME: ",i,end="\r")
+        for cloud in clouds:
+            if cloud.size < 200:
+                continue
+            img = cloud.draw_hull( img )
+            img = cloud.draw_path( img )
 
         cv.imshow(windowname,img)
         if cv.waitKey(25) & 0XFF == ord('q'):
             break   
     cv.destroyAllWindows()
 
-show_label()
+#oneCalc()
+#show_label()
+#full()

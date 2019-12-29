@@ -73,6 +73,8 @@ class Cloud():
     def __init__(self,points,size = None):
         
         self.points = points
+        #if len(points[0]) > 10:
+
         if size is None:
             self.size = len(points[0])
         else:
@@ -86,7 +88,7 @@ class Cloud():
         # self.pts == self.points as array not index_array
         self.pts = [[x,y] for x,y in zip(self.points[0],self.points[1])]
         self.convex_hull_pts = None
-        if len(self.pts) < 10:
+        if len(list(set(points[0]))) < 5 or len(list(set(points[1]))) < 5:
             self.hull = None
         else:
             self.hull = ConvexHull(np.array(self.pts))
@@ -184,11 +186,16 @@ class Cloud():
                 shift=0) 
 
         else:
-            img[h_i] = 255
+            img[self.convex_hull_pts] = 255
+            cv.circle(img, 
+                (self.center_of_mass[1],self.center_of_mass[0]), 
+                5, 
+                [255], 
+                thickness=1, 
+                lineType=8, 
+                shift=0) 
 
         return img
-
-
 
     def bounding_box(self,img):
 
@@ -225,9 +232,16 @@ class Cloud():
         return ret.reshape(y,1,x)
 
     def set_direction(self,dirv):
-        
+        """
+            
+            Somewhere x-,y-coordinate changes
+
+        """
+
         if self.direction_vec is None:
-            self.direction_vec = dirv
+            self.direction_vec = [dirv[1],dirv[0]]
+            
+            #self.direction_vec = dirv
             
         else:
             # updaten
@@ -270,14 +284,19 @@ class Cloud():
             intersect = (point - anchor_point ) / vector
             return intersect
 
-        
+        if self.convex_hull_pts is None:
+            print("CONVEX HULL NONE: ",self.points)
+            return img
         x,y = self.convex_hull_pts
 
         
         closest_point = []
         for pt in zip(x,y[0]):
+
+            #pt = [pt[1],pt[0]]
             # dist
-            intersect = intersection(pt,com,nom)
+            intersect = intersection(pt,com,nom * 100)
+            
 
             t = np.abs(intersect[0] - intersect[1])
             closest_point.append( (t,intersect,pt) )
@@ -316,7 +335,8 @@ class Cloud():
                     smallest_pos = (t,[x,y])
         
 
-        
+        if smallest_pos == None or smallest_neg == None:
+            return img
         w,h = img.shape[:2]
 
         dir_pos = smallest_pos[0]+(div * 100)
