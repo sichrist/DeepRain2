@@ -609,6 +609,9 @@ def show_label():
 
 
 def oneCalc():
+    pattern = ".*"
+    datafolder = "../PNG_NEW/MonthPNGData/YW2017.002_200806/"
+    t = Tracker(datafolder,pattern=pattern,max_dist=1)
     img_old = t.data[0]
     img_new = t.data[9]
 

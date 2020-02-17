@@ -285,7 +285,6 @@ class Cloud():
             return intersect
 
         if self.convex_hull_pts is None:
-            print("CONVEX HULL NONE: ",self.points)
             return img
         x,y = self.convex_hull_pts
 
@@ -299,6 +298,8 @@ class Cloud():
             
 
             t = np.abs(intersect[0] - intersect[1])
+            print((t,intersect,pt))
+            
             closest_point.append( (t,intersect,pt) )
 
             

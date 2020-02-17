@@ -13,16 +13,22 @@ from Dataset import DataProvider
 from Cloud import Cloud
 from ColorHelper import MplColorHelper
 from tracker import Tracker
+from time import sleep
 import re
 regex = r"scaled_([0-9]+).png"
+regex = r"([0-9]+).png"
+pattern = "scaled_17051.*"
+pattern = ".*"
 windowname = " BOINg "
-
+datafolder = "../PNG"
+datafolder = "../PNG_NEW/MonthPNGData/YW2017.002_200806/"
 
 y,x = 450,550
-data = DataProvider("../PNG",openIMG=False)
-tracker = Tracker(max_dist=2)
+data = DataProvider(datafolder,pattern=pattern,openIMG=False)
+tracker = Tracker(max_dist=5)
 data.max_contrast()
 data.binary()
+#data.scale(0.5)
 
 def showPoint(data):
 
@@ -47,7 +53,7 @@ def get_img_infos(data,point):
     x,y = point
 
 
-    for filename in data:
+    for i,filename in enumerate(data):
         matches = re.search(regex, filename)
         date = None
         rain = False
@@ -64,6 +70,8 @@ def get_img_infos(data,point):
             rain_img += 1
 
         files_info.append((filename,rain,date))
+        if i == 100:
+            break
 
 
     return files_info
@@ -74,7 +82,7 @@ def predict(fileinfos,tracker,ttp=30,steps=5):
     
 
     correct = 0
-
+    print(fileinfos)
     for i in range(start,len(fileinfos)):
 
 
@@ -91,9 +99,9 @@ def predict(fileinfos,tracker,ttp=30,steps=5):
         img2 = data._openIMG(img_past_mo)
         img1 = data._openIMG(img_past)
         img = np.array(Image.open(img_to_pred))
-
-        clouds = tracker.calcFlow_clouds(img2,img1)
-
+        print("HIER")
+        clouds = tracker.calcFlow_clouds(img1,img2)
+        print("NACH FLOW")
 
         img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
         img = cv.circle(img, 
@@ -112,12 +120,16 @@ def predict(fileinfos,tracker,ttp=30,steps=5):
             img = cloud.draw_path(img)
         
         cv.namedWindow(windowname)
-        cv.moveWindow(windowname,2600,40)
+        cv.moveWindow(windowname,0,40)
         
         cv.imshow(windowname,img)
-        while True:
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                break
+        #while True:
+            #if cv.waitKey(25) & 0XFF == ord('q'):
+            #    break
+            #sleep(0.5)
+            #break
+        if cv.waitKey(25) & 0XFF == ord('q'):
+            break
         
 
 

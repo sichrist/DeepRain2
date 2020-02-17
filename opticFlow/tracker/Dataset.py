@@ -9,7 +9,7 @@ class DataProvider(object):
     
     """
     
-    def __init__(self,path,openIMG=True,pattern="scaled_17051.*"):
+    def __init__(self,path,openIMG=True,pattern=".*"):
         def get_files(pwd,pattern=""):
     
             """
@@ -33,12 +33,18 @@ class DataProvider(object):
         self.openIMG = openIMG
         self.transform = []
 
+
     def binary(self):
         self.transform.append(self.binary_)
 
 
     def max_contrast(self):
         self.transform.append(self.max_contrast_)
+
+    def scale(self,factor):
+        self.factor=factor
+        self.transform.append(self.scale_)
+
       
     def binary_(self,img,threshold=5):
         
@@ -47,6 +53,14 @@ class DataProvider(object):
         img[img <= threshold] = 0
         
         return img
+
+    def scale_(self,img):
+        w,h = img.shape
+        img = Image.fromarray(img)
+        newsize = (int(w*self.factor),int(h*self.factor) )
+        img = img.resize(newsize) 
+        return np.array(img)
+
 
     def transform(function):
         self.transform.append(function)
@@ -59,6 +73,7 @@ class DataProvider(object):
                 also deleting "edges"
 
             """
+            print("max_contrast_")
 
             img[img == img[0,0]] = 0
 
@@ -69,6 +84,8 @@ class DataProvider(object):
             img -= mi
             img[img == ma -mi] = 0
             ma = img.max()
+            if ma == 0:
+                ma = 1
             img = np.array(((img / ma) * 255),dtype='uint8')
             return img
     
