@@ -298,7 +298,7 @@ class Cloud():
             
 
             t = np.abs(intersect[0] - intersect[1])
-            print((t,intersect,pt))
+            #print((t,intersect,pt))
             
             closest_point.append( (t,intersect,pt) )
 

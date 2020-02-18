@@ -99,9 +99,8 @@ def predict(fileinfos,tracker,ttp=30,steps=5):
         img2 = data._openIMG(img_past_mo)
         img1 = data._openIMG(img_past)
         img = np.array(Image.open(img_to_pred))
-        print("HIER")
         clouds = tracker.calcFlow_clouds(img1,img2)
-        print("NACH FLOW")
+ 
 
         img = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
         img = cv.circle(img, 

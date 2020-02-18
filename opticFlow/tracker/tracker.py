@@ -25,7 +25,7 @@ class Tracker(object):
     docstring for Tracker
 
     """
-    def __init__(self, path=None,max_dist = 20,binary=True,max_contrast=True,transform=None):
+    def __init__(self, path=None,max_dist = 20,binary=True,max_contrast=True,transform=None,threshold=5):
         super(Tracker, self).__init__()
 
         if path is not None:
@@ -37,7 +37,7 @@ class Tracker(object):
             if binary:
                 self.data.binary()
         self.max_dist = max_dist
-        self.threshold = 5
+        self.threshold = threshold
     
     def label_To_index(self,label,img):
 
@@ -65,12 +65,10 @@ class Tracker(object):
         true_value = img.max()
         x,y = np.where(img == 1)
 
-        print(img.dtype)
-
 
         collision = dict()
         label = 2
-        print(self.max_dist)
+
         for i,j in zip(x,y):
             i_X = slice(i-self.max_dist,i+self.max_dist)
             j_Y = slice(j-self.max_dist,j+self.max_dist)
@@ -345,12 +343,11 @@ class Tracker(object):
 
         cloudlist1 = self.sequentialLabeling(img1)
         cloudlist2 = self.sequentialLabeling(img2)
-
         clouds1 = self.getClouds(cloudlist1,img1)
         clouds2 = self.getClouds(cloudlist2,img2)
 
-        #flow = average_movement(flow,clouds1)
-        flow = median_movement(flow,clouds1)
+        flow = average_movement(flow,clouds1)
+        #flow = median_movement(flow,clouds1)
         #flow = average_movement_normalized(flow,clouds1)
 
         """

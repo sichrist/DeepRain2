@@ -5,11 +5,12 @@ from imgprocessing import sequentialLabeling,convex_hull
 from Dataset import DataProvider
 import cv2 as cv
 import numpy as np
+from tracker import Tracker
 
 
 windowname = 'OpenCvFrame'
 cv.namedWindow(windowname)
-cv.moveWindow(windowname,0,40)
+cv.moveWindow(windowname,2600,40)
 
 
 datafolder = "../PNG_NEW/MonthPNGData/YW2017.002_200806/"
@@ -57,9 +58,11 @@ def optic_flow_cv(img1,img2):
     visualised = draw_flow(img1.copy(),flow)
     return visualised
 
-
+tracker = Tracker(max_dist=7)
 
 imglist = []
+data.max_contrast()
+data.binary()
 for img in data:
     #labels = sequentialLabeling(img,max_dist=10,threshold=2)
     #hull = convexHull_(labels)
@@ -70,7 +73,7 @@ for img in data:
     imglist.append(img)
     if len(imglist) < 2:
         continue
-
+    """
     visualised = optic_flow_cv(imglist[0],imglist[1])
 
     visualised = np.concatenate( (cv.cvtColor(img, cv.COLOR_GRAY2RGB),visualised), axis = 1 )
@@ -80,3 +83,17 @@ for img in data:
     cv.imshow(windowname,visualised)
     if cv.waitKey(25) & 0XFF == ord('q'):
         break
+    """
+    if cv.waitKey(25) & 0XFF == ord('q'):
+        break
+    img_cpy = cv.cvtColor(imglist[0].copy(),cv.COLOR_GRAY2RGB)
+    clouds = tracker.calcFlow_clouds(imglist[0],imglist[1])
+    for cloud in clouds:
+      if cloud.size < 50:
+        continue
+      img_cpy = cloud.draw_hull(img_cpy)
+      img_cpy = cloud.draw_path(img_cpy)
+
+    cv.imshow(windowname,img_cpy)
+
+    imglist.pop(0)
