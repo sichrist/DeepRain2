@@ -214,7 +214,7 @@ class Dataset(Sequence):
                       shuffle=True,
                       saveListOfFiles=CSVFILE,
                       workingdir=WRKDIR,
-                      timeToPred = 30,
+                      timeToPred = 10,
                       timeSteps = 5,
                       sequenceExist = False,
                       flatten = False,
@@ -305,9 +305,11 @@ class Dataset(Sequence):
                 print(CYAN+"But length does not match again.... just delete the folders bruh"+RESET)
 
         self.listOfFiles = self.new_listOfFiles
-        self.listOfFiles = self.new_listOfFiles[416:436]
+        #self.listOfFiles = self.new_listOfFiles[416:436]
+        #self.listOfFiles = self.new_listOfFiles[500:10000]
 
-        self.indizes = np.arange(len(self))
+        #self.indizes = np.arange(len(self))
+        self.indizes = np.arange(len(self.listOfFiles)-self.label_offset)
 
 
         if self.sortOut:
@@ -342,9 +344,12 @@ class Dataset(Sequence):
 
             for operation in self.transform:
                 label = operation(label)
+
                     
 
-        Y.append(label)
+        #Y.append(label)
+        Y = label
+
 
         return np.array(X),np.array(Y)
 
@@ -368,7 +373,8 @@ class Dataset(Sequence):
 
         X = []
         Y = []
-        id_list = self.indizes[index:index+self.batch_size]
+        
+        id_list = self.indizes[(index*self.batch_size):(index*self.batch_size)+self.batch_size]
         
         for idd in id_list:
             
@@ -383,13 +389,13 @@ class Dataset(Sequence):
 
         X = np.transpose(X,(0,2,3,1))
         if self.transform is not None:
-            return X/255.0,Y/255.0
+            return X/255.0,Y/1.0
         if not self.flatten:
+            
             Y = np.transpose(Y,(0,2,3,1))
-
         else:
-            return X/255,Y.flatten()
+           return X/255,Y.flatten()
 
-        
-        return X/255.0,Y/1.0
+
+        return X/255.0,Y/255.0
         

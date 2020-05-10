@@ -9,7 +9,8 @@ except Exception as e:
     PSWD = None
     USRN = None
 
-HOST = "deeprain.ddns.net"
+#HOST = "deeprain.ddns.net"
+HOST = "192.168.2.218"
 PORT = 22
 DOWNLOAD_PATH = "/home/bananapi/Dataset/DeepRain"
 

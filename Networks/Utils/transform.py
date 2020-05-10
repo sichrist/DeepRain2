@@ -5,6 +5,7 @@ from time import sleep
 from PIL import Image
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 
 class fromCategorical(object):
@@ -27,26 +28,25 @@ class ToCategorical(object):
     """
     def __init__(self, conditions):
         super(ToCategorical, self).__init__()
-        self.conditions = conditions
+        self.conditions = np.array(conditions)
         self.numClasses = len(self.conditions) -1
 
     def __call__(self,array):
         newVector = np.zeros((*array.shape,self.numClasses))
-
         for i in range(1,self.numClasses):
             value = self.conditions[i]
             valuePrev = self.conditions[i-1]
             idx = np.where((array < value) & (array >=valuePrev))
+            if len(idx[0]) == 0:
+                continue
+
             classV = np.zeros((self.numClasses))
             classV[i-1] = 1
-            newVector[idx,:] = classV
 
+            
+            newVector[idx] = classV
 
-        for i in newVector:
-            if i.max() < 1:
-                print(i)
-                exit(-1)
-        return newVector.flatten()
+        return newVector
 
 class Binarize(object):
     """docstring for Binarize"""
