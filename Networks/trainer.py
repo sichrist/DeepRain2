@@ -15,6 +15,7 @@ import json
 print("Num GPUs Available:", len(
     tf.config.experimental.list_physical_devices('GPU')))
 gpu = tf.config.experimental.list_physical_devices('GPU')
+#print("GPU",gpu)
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
 

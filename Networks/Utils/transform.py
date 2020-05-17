@@ -70,6 +70,16 @@ class Flatten(object):
         img = img.flatten()
         return img      
 
+
+class NormalDist(object):
+    """docstring for Normaldistribution"""
+    def __init__(self):
+        super(NormalDist, self).__init__()
+              
+        
+    def __call__(self,img):
+        return img - 127.0
+
 ########################################################################
 ###                     PRETRANSFORMATIONS                           ###
 ########################################################################
@@ -90,7 +100,7 @@ class cutOut(object):
     def __str__(self):
         savefolder=str(self.idx[0])+"x"+str(self.idx[1])+"_"+str(self.idx[0])+"x"+str(self.idx[1])
         return savefolder
-        
+
 
 
 class resize(object):
@@ -169,14 +179,19 @@ def transformImages(listOfFiles,transformation,savedir,saveListOfFiles):
     nbrProcesses = cpu_count() * 2   
     splittedlist = []
     stepsize = len(listOfFiles) // nbrProcesses
+
+    
+
     #splittedlist = [listOfFiles[i:i + stepsize] for i in range(0, len(listOfFiles), stepsize)]
 
 
     for i in range(0,len(listOfFiles),stepsize):
         splittedlist.append(listOfFiles[i:i + stepsize])
 
+
+    
     jobs = []
-    for i in range(nbrProcesses):
+    for i in range(len(splittedlist)):
         p = Process(target=fProcess, args=(splittedlist[i],savedir,transformation))
         jobs.append(p)
         p.start()

@@ -210,15 +210,15 @@ class Dataset(Sequence):
     def __init__(self,path,
                       batch_size,
                       dim,
-                      n_channels=4,
+                      n_channels=5,
                       shuffle=True,
                       saveListOfFiles=CSVFILE,
                       workingdir=WRKDIR,
-                      timeToPred = 10,
+                      timeToPred = 5,
                       timeSteps = 5,
                       sequenceExist = False,
                       flatten = False,
-                      sortOut=False,
+                      sortOut=True,
                       lstm=True,
                       dtype=np.float32,
                       transform=None,
@@ -306,14 +306,22 @@ class Dataset(Sequence):
 
         self.listOfFiles = self.new_listOfFiles
         #self.listOfFiles = self.new_listOfFiles[416:436]
-        #self.listOfFiles = self.new_listOfFiles[500:10000]
+        #self.listOfFiles = self.new_listOfFiles[1000:1500]
 
         #self.indizes = np.arange(len(self))
         self.indizes = np.arange(len(self.listOfFiles)-self.label_offset)
 
-
+        def sortOut(listOfFiles):
+            y = []
+            for i in range(len(listOfFiles) -self.label_offset):
+                path = listOfFiles[i]
+                img = np.array(Image.open(path))
+                if img.max() > 0:
+                    y.append(i)
+            return y
         if self.sortOut:
-            self.indizes = sortOutFiles(self.listOfFiles,self.indizes)
+            self.indizes = sortOut(self.listOfFiles)
+
         
 
 
@@ -341,15 +349,17 @@ class Dataset(Sequence):
 
 
         if self.transform is not None:
-
             for operation in self.transform:
                 label = operation(label)
 
                     
-
-        #Y.append(label)
-        Y = label
-
+        
+        
+        #Y.append(label.flatten())
+        #Y = label.flatten()
+        #Y = label
+        Y.append(label)
+        
 
         return np.array(X),np.array(Y)
 
@@ -362,8 +372,8 @@ class Dataset(Sequence):
 
 
     def __len__(self):
-        
-        return int(np.floor((len(self.listOfFiles) - self.label_offset)/self.batch_size )) 
+        #return int(np.floor((len(self.listOfFiles) - self.label_offset)/self.batch_size )) 
+        return int(np.floor((len(self.indizes) - self.label_offset)/self.batch_size ))
 
  
     def __getitem__(self,index):
@@ -386,15 +396,20 @@ class Dataset(Sequence):
         X = np.array(X)
         Y = np.array(Y)
         
+        
+        #print(X.shape,Y.shape)
 
         X = np.transpose(X,(0,2,3,1))
         if self.transform is not None:
-            return X/255.0,Y/1.0
-        if not self.flatten:
-            
             Y = np.transpose(Y,(0,2,3,1))
+            
+            return X/255.0,Y/255.0
+        if not self.flatten:
+            pass
+            #Y = np.transpose(Y,(0,2,3,1))
         else:
            return X/255,Y.flatten()
+
 
 
         return X/255.0,Y/255.0
