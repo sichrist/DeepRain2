@@ -71,6 +71,15 @@ class Flatten(object):
         return img      
 
 
+class ToUint8(object):
+    """docstring for ToUint8"""
+    def __init__(self):
+        super(ToUint8, self).__init__()
+              
+        
+    def __call__(self,img):
+        return (img * 255).astype(np.uint8)
+
 class NormalDist(object):
     """docstring for Normaldistribution"""
     def __init__(self):
@@ -79,6 +88,7 @@ class NormalDist(object):
         
     def __call__(self,img):
         return img - 127.0
+
 
 ########################################################################
 ###                     PRETRANSFORMATIONS                           ###

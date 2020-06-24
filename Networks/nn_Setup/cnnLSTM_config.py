@@ -1,6 +1,5 @@
 
 from tensorflow.keras.optimizers import Adam
-#from Utils.loss import *
 from Utils.transform import *
 import tensorflow as tf
 

@@ -1,13 +1,12 @@
 from __future__ import print_function
-from Utils.Data import Dataset, dataWrapper
+from Utils.Data import Dataset, dataWrapper, getListOfFiles
 import numpy as np
 from Models.Unet import unet
 from Models.tfModels import UNet64
 from Utils.loss import SSIM
 from tensorflow.keras.optimizers import *
-#from keras import backend as K
+from tensorflow.keras.callbacks import *
 import tensorflow as tf
-import keras
 import os
 import json
 #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -15,7 +14,6 @@ import json
 print("Num GPUs Available:", len(
     tf.config.experimental.list_physical_devices('GPU')))
 gpu = tf.config.experimental.list_physical_devices('GPU')
-#print("GPU",gpu)
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
 
@@ -58,10 +56,15 @@ class Trainer(object):
                 flatten = False,
                 pathToModel="./model_data",
                 load = True,
+                checkpoint = True,
+                modelname = None,
                 kwargs={}):
 
         super(Trainer, self).__init__()
-        self.nameOfModel = model.__name__
+        if modelname is not None:
+            self.nameOfModel = modelname
+        else:
+            self.nameOfModel = model.__name__
         self.pathToData = pathToData
         self.batch_size = batch_size
         self.channels = channels
@@ -72,7 +75,7 @@ class Trainer(object):
         self.load = load
         self.initialEpoch = 0
         self.history = None
-        
+        self.checkpoint = checkpoint
 
         if type(self.pathToData) is tuple:
             self.train, self.test = self.pathToData
@@ -89,7 +92,7 @@ class Trainer(object):
             self.nameOfModel += "_"+lossfunction
 
         else:
-            self.nameOfModel+="_"+lossfunction.__class__.__name__
+            self.nameOfModel +="_"+lossfunction.__class__.__name__
 
         self.pathToModel = os.path.join(pathToModel,self.nameOfModel)
 
@@ -103,8 +106,14 @@ class Trainer(object):
             if i < len((*dimension,channels)) - 1:
                 self.nameOfModel +="x"
 
+        if self.checkpoint:
+            modelname = os.path.join(self.pathToModel,'model-{epoch:03d}-{loss:03f}-{val_loss:03f}.h5')
+            self.checkpoint = ModelCheckpoint(modelname, verbose=1, monitor='val_loss',save_best_only=True, mode='auto') 
+
 
         self.model.compile(loss=lossfunction, optimizer=optimizer, metrics=metrics)
+
+
         if self.load:
             try:
                 filename = os.path.join(self.pathToModel,self.nameOfModel+".h5")
@@ -143,6 +152,7 @@ class Trainer(object):
                                       use_multiprocessing=False,
                                       validation_data=self.test,
                                       verbose = 1,
+                                      callbacks=self.checkpoint,
                                       shuffle=False)    # Shuffle needs to be False, cause of shuffle buffer
         if self.history is None:
             self.history = history.history
@@ -158,3 +168,11 @@ class Trainer(object):
 
         #self.model.save_weights(os.path.join(self.pathToModel,self.nameOfModel+".h5"))
         self.model.save(os.path.join(self.pathToModel,self.nameOfModel+".h5"))
+
+
+    def predict(self,testdata=None,predictClass=None):
+        if testdata is None:
+            testdata = self.test
+
+
+

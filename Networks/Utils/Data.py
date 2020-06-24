@@ -27,6 +27,8 @@ def provideData(dimension,
                 transform=None,
                 preTransformation=None,
                 year = [2017],
+                timeToPred = 30,
+                fillSteps = False,
                 onlyUseYears = None,
                 DatasetFolder=DatasetFolder):
 
@@ -38,12 +40,14 @@ def provideData(dimension,
 
     """
 
-    getDataSet(DatasetFolder,year=[2017])
+    getDataSet(DatasetFolder,year=year)
     train,test = dataWrapper(PathToData,
                             dimension=dimension,
                             channels=channels,
                             batch_size=batch_size,
                             overwritecsv=True,
+                            fillSteps = fillSteps,
+                            timeToPred = timeToPred,
                             onlyUseYears=onlyUseYears,
                             transform=transform,
                             preTransformation=preTransformation)
@@ -60,7 +64,9 @@ def dataWrapper(path,
                 flatten=False,
                 sortOut=True,
                 shuffle=True,
+                fillSteps = False,
                 overwritecsv=False,
+                timeToPred = 5,
                 onlyUseYears=None,
                 preTransformation=None,
                 transform=None):
@@ -111,7 +117,9 @@ def dataWrapper(path,
                     batch_size = batch_size,
                     workingdir=TRAINSETFOLDER,
                     saveListOfFiles=trainsetCSV,
+                    timeToPred = timeToPred,
                     flatten=flatten,
+                    fillSteps = fillSteps,
                     shuffle=shuffle,
                     transform=transform,
                     preTransformation=preTransformation)
@@ -122,8 +130,10 @@ def dataWrapper(path,
                     batch_size = batch_size,
                     workingdir=VALSETFOLDER,
                     saveListOfFiles=valsetCSV,
+                    timeToPred = timeToPred,
                     flatten=flatten,
                     shuffle=shuffle,
+                    fillSteps = fillSteps,
                     transform=transform,
                     preTransformation=preTransformation)
 
@@ -220,6 +230,7 @@ class Dataset(Sequence):
                       flatten = False,
                       sortOut=True,
                       lstm=True,
+                      fillSteps=False,
                       dtype=np.float32,
                       transform=None,
                       preTransformation=None):
@@ -236,23 +247,27 @@ class Dataset(Sequence):
         assert timeToPred % 5 == 0, "timeToPred % 5 needs to be 0"
 
 
-        self.path = path
+        self.path       = path
         self.batch_size = batch_size
-        self.dim = dim
+        self.dim        = dim
+        self.fillSteps  = fillSteps
         self.n_channels = n_channels
-        self.shuffle = shuffle
+        self.shuffle    = shuffle
         self.workingdir = workingdir
-        self.saveListOfFiles = saveListOfFiles
         self.timeToPred = timeToPred
-        self.timeSteps = timeSteps
-        self.steps = int(timeToPred / timeSteps)
-        self.datatype = dtype
-        self.flatten = flatten
-        self.sortOut = sortOut
-        self.lstm = lstm
-        self.transform = transform
-        self.preTransformation = preTransformation
+        self.timeSteps  = timeSteps
+        self.steps      = int(timeToPred / timeSteps)
+        self.datatype   = dtype
+        self.flatten    = flatten
+        self.sortOut    = True
+        self.lstm       = lstm
+        self.transform  = transform
+        self.preTransformation  = preTransformation
+        self.saveListOfFiles    = saveListOfFiles
 
+
+        print("[DEBUG] Data")
+        print("[DEBUG] time to predict: ",timeToPred)
 
         if preTransformation is None:
             self.preTransformation=[resize(self.dim)]
@@ -302,7 +317,7 @@ class Dataset(Sequence):
             print(GREEN+"Fixed! "+RESET)
             self.new_listOfFiles = newlist
             if len(self.new_listOfFiles) != len(self.listOfFiles):
-                print(CYAN+"But length does not match again.... just delete the folders bruh"+RESET)
+                print(CYAN+"But length does not match again.... just delete the folders"+RESET)
 
         self.listOfFiles = self.new_listOfFiles
         #self.listOfFiles = self.new_listOfFiles[416:436]
@@ -323,7 +338,7 @@ class Dataset(Sequence):
             self.indizes = sortOut(self.listOfFiles)
 
         
-
+        self.indizes = self.indizes[:40]
 
     def __data_generation(self,index):
         X = []
@@ -340,7 +355,10 @@ class Dataset(Sequence):
 
 
         try:
-            label = np.array(Image.open(self.listOfFiles[index+self.label_offset]))
+            if not self.fillSteps:
+                label = [np.array(Image.open(self.listOfFiles[index+self.label_offset]))]
+            else:
+                label = [np.array(Image.open(self.listOfFiles[id])) for id in range(index+self.n_channels,index+self.label_offset+1)]
             
         except Exception as e:
             print("\n\n",index,self.label_offset,len(self.listOfFiles))
@@ -350,17 +368,18 @@ class Dataset(Sequence):
 
         if self.transform is not None:
             for operation in self.transform:
-                label = operation(label)
+                if type(label) is list:
+                    for i in range(len(label)):
+                        label[i] = operation(label[i])
+                else:
+                    label = operation(label)
 
                     
         
         
-        #Y.append(label.flatten())
-        #Y = label.flatten()
-        #Y = label
-        Y.append(label)
-        
 
+        
+        Y = label
         return np.array(X),np.array(Y)
 
 
@@ -396,14 +415,14 @@ class Dataset(Sequence):
         X = np.array(X)
         Y = np.array(Y)
         
-        
-        #print(X.shape,Y.shape)
 
         X = np.transpose(X,(0,2,3,1))
+        Y = np.transpose(Y,(0,2,3,1))
         if self.transform is not None:
-            Y = np.transpose(Y,(0,2,3,1))
-            
-            return X/255.0,Y/255.0
+                        
+            return X/255.0,Y
+
+            #return X/255.0,Y/255.0
         if not self.flatten:
             pass
             #Y = np.transpose(Y,(0,2,3,1))
@@ -411,6 +430,8 @@ class Dataset(Sequence):
            return X/255,Y.flatten()
 
 
+        return X/255.0,Y
 
-        return X/255.0,Y/255.0
+        #return X/255.0,Y/255.0
+        
         
