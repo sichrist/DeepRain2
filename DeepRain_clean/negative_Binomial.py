@@ -10,6 +10,7 @@ from Utils.Dataset import getData
 from Utils.transform import cutOut
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.models import load_model
+from tensorflow.keras.regularizers import l2
 import os
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -23,7 +24,9 @@ def param_layer_ZNBinomial(
                         parameters=2,
                         dense=256,
                         dropout=0.1,
-                        ouput_shape=(64,64)):
+                        ouput_shape=(64,64),
+                        kernel_regularizer=l2(0.01), 
+                        bias_regularizer=l2(0.01)):
 
 
     
@@ -35,9 +38,15 @@ def param_layer_ZNBinomial(
     count = Flatten()(layer[:,:,:,2:4])
     prob = Flatten()(layer[:,:,:,4:6])
     
-    cat      = Dense(dense)(cat)
-    count    = Dense(dense)(count)
-    prob     = Dense(dense)(prob)
+    cat      = Dense(dense,
+                    kernel_regularizer=kernel_regularizer, 
+                    bias_regularizer=bias_regularizer)(cat)
+    count    = Dense(dense,
+                    kernel_regularizer=kernel_regularizer, 
+                    bias_regularizer=bias_regularizer)(count)
+    prob     = Dense(dense,
+                    kernel_regularizer=kernel_regularizer, 
+                    bias_regularizer=bias_regularizer)(prob)
     
     
     #cat     = Dropout(dropout)(cat)
