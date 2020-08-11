@@ -8,8 +8,8 @@ def ZeroInflated_Poisson():
         name="DistributionLayer",
         make_distribution_fn=lambda t: tfp.distributions.Independent(
         tfd.Mixture(
-            cat=tfd.Categorical(tf.stack([1-t[...,:1], t[...,:1]],axis=-1)),
-            components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
+            cat=tfd.Categorical(probs=tf.stack([1-t[...,0:1], t[...,0:1]],axis=-1)),
+            components=[tfd.Deterministic(loc=tf.zeros_like(t[...,0:1])),
             tfd.Poisson(rate=tf.math.softplus(t[...,1:2]))]),
         name="ZeroInflated",reinterpreted_batch_ndims=0 ))
 
@@ -20,10 +20,11 @@ def ZeroInflated_Binomial():
         name="DistributionLayer",
         make_distribution_fn=lambda t: tfp.distributions.Independent(
         tfd.Mixture(
-                    cat=tfd.Categorical(tf.stack([1-t[...,:1],
-                        t[...,:1]],axis=-1)),
-                    components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
+                    cat=tfd.Categorical(tf.stack([1-t[...,0:1],
+                        t[...,0:1]],axis=-1)),
+                    components=[tfd.Deterministic(loc=tf.zeros_like(t[...,0:1])),
                     tfp.distributions.NegativeBinomial(
-                    total_count=tf.math.softplus(t[..., 1:2]), \
+                    total_count=t[..., 1:2], \
                     logits=t[..., 2:])]),
+        #name="ZeroInflated_Binomial",reinterpreted_batch_ndims=-1 ))
         name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0 ))

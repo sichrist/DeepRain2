@@ -3,78 +3,94 @@ from tensorflow.keras.optimizers import Adam
 from Models.Unet import Unet
 from Models.Loss import NLL
 from Models.Distributions import *
+from Models.Utils import *
 from tensorflow.keras.layers import *
 from tensorflow.keras import Sequential, Model
 from Utils.Dataset import getData
 from Utils.transform import cutOut
 from tensorflow.keras.callbacks import *
-from Models.Utils import *
 from tensorflow.keras.models import load_model
 from tensorflow.keras.regularizers import l2
 import os
 import cv2 as cv
-import numpy as np
 
 physical_devices = tf.config.list_physical_devices('GPU')
 print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-def param_layer_ZPoisson(
+
+def param_layer_ZNBinomial(
                         output,
                         parameters=2,
-                        dense=256,
+                        dense=512,
                         dropout=0.1,
-                        ouput_shape=(64,64),
-                        kernel_regularizer=l2(0.01), 
-                        bias_regularizer=l2(0.01)):
+                        ouput_shape=(12,12),
+                        kernel_regularizer=l2(0.001), 
+                        bias_regularizer=l2(0.001)):
 
+    
     layer = output
-    layer = MaxPooling2D((2, 2), strides=(2, 2))(layer)
-    layer = Conv2D(2, kernel_size=(3, 3), padding="same",activation="selu",
-                    kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer) (layer)
+    #layer = MaxPooling2D((2, 2), strides=(2, 2))(layer)
+    layer = Conv2D(144, 
+                    kernel_size=(5, 5), 
+                    padding="same",
+                    activation="selu") (layer)
 
-    layer_1 = Flatten()(layer[:,:,:,:1])
-    layer_2 = Flatten()(layer[:,:,:,1:2])
+    cat = Flatten()(layer[:,:,:,:2])
+    count = Flatten()(layer[:,:,:,2:4])
+    prob = Flatten()(layer[:,:,:,4:6])
     
-    layer_1      = Dense(dense,
-                    bias_initializer="glorot_uniform",
+    cat      = Dense(dense,
                     kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer)(layer_1)
-    layer_2      = Dense(dense,
-                    bias_initializer="glorot_uniform",
+                    bias_regularizer=bias_regularizer,
+                    bias_initializer="glorot_uniform")(cat)
+    count    = Dense(dense,
                     kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer)(layer_2)
-    #layer_1      = Dropout(dropout)(layer_1)
-    #layer_1      = Dropout(dropout)(layer_1)
+                    bias_regularizer=bias_regularizer,
+                    bias_initializer="glorot_uniform")(count)
+    prob     = Dense(dense,
+                    kernel_regularizer=kernel_regularizer, 
+                    bias_regularizer=bias_regularizer,
+                    bias_initializer="glorot_uniform")(prob)
     
-    layer_1 = Dense(ouput_shape[0]*ouput_shape[1],
+    
+    cat     = Dropout(dropout)(cat)
+    count   = Dropout(dropout)(count)
+    prob    = Dropout(dropout)(prob)
+    
+    cat     = Dense(ouput_shape[0]*ouput_shape[1],
                     activation="sigmoid",
-                    bias_initializer="glorot_uniform")(layer_1)
-    layer_2 = Dense(ouput_shape[0]*ouput_shape[1],
-                    activation="relu",
-                    bias_initializer="glorot_uniform")(layer_2)
-    layer_1 = tf.keras.layers.Reshape((*ouput_shape,1))(layer_1)
-    layer_2 = tf.keras.layers.Reshape((*ouput_shape,1))(layer_2)
-    input_dist= tf.concat([layer_1,layer_2],axis=-1)
+                    bias_initializer="glorot_uniform")(cat)
+    count   = Dense(ouput_shape[0]*ouput_shape[1],
+                    activation="selu",
+                    bias_initializer="glorot_uniform")(count)
+    prob    = Dense(ouput_shape[0]*ouput_shape[1],
+                    activation="sigmoid",
+                    bias_initializer="glorot_uniform")(prob)
+    
+    cat     = tf.keras.layers.Reshape((*ouput_shape,1))(cat)
+    count   = tf.keras.layers.Reshape((*ouput_shape,1))(count)
+    prob    = tf.keras.layers.Reshape((*ouput_shape,1))(prob)
+    
+    input_dist = tf.concat([cat,count,prob],axis=-1)
+
 
     return input_dist
 
-
-BATCH_SIZE = 20
-DIMENSION = (128,128)
+BATCH_SIZE = 100
+DIMENSION = (16,16)
 CHANNELS = 7
 MODELPATH = "./Models_weights"
-MODELNAME = "ZeroInflatedPoisson"
-
+MODELNAME = "small_ZeroInflatedNegativeBinomial"
 
 def getModel():
-
     modelpath = MODELPATH
     modelname = MODELNAME
+
+    
     if not os.path.exists(modelpath):
-        os.mkdir(modelpath)
+            os.mkdir(modelpath)
 
     modelpath = os.path.join(modelpath,modelname)
 
@@ -82,27 +98,31 @@ def getModel():
         os.mkdir(modelpath)
 
 
-
-
     inputs,outputs = Unet(
                 input_shape=(*DIMENSION,CHANNELS),
-                output_dim = 2
+                output_dim = 20,
+                kernel_regularizer=0.01,
+                bias_regularizer=0.01
                 )
 
-    y_transform = [cutOut([32,96,32,96])]
+
+    y_transform = [cutOut([2,14,2,14])]
+    
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=10,
+                         timeToPred=5,
                          y_transform=y_transform)
 
 
-    outputs = param_layer_ZPoisson(outputs)
-    dist_outputs = ZeroInflated_Poisson()
+    outputs = param_layer_ZNBinomial(outputs,
+                kernel_regularizer = l2(0.01),
+                bias_regularizer = l2(0.01))
+    dist_outputs = ZeroInflated_Binomial()
     outputs = dist_outputs(outputs)
 
-
+    neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     model = Model(inputs,outputs)
-    model.compile(loss=NLL,
+    model.compile(loss=neg_log_likelihood,
                   optimizer=Adam( lr= 1e-3 ))
     model.summary()
     modelpath_h5 = os.path.join(modelpath,
@@ -116,43 +136,23 @@ def getModel():
 
     return model,checkpoint,modelpath,train,test
 
-
 def train():
     modelpath = MODELPATH
     modelname = MODELNAME
 
     model,checkpoint,modelpath,train,test = getModel()
 
+
+
     history_path = os.path.join(modelpath,modelname+"_history")
     laststate = getBestState(modelpath,history_path)
     test.setWiggle_off()
+    train.setWiggle_off()
 
-    import cv2 as cv
-    import time
-    windowname = 'OpenCvFrame'
-    cv.namedWindow(windowname)
-    cv.moveWindow(windowname,0,00)
-
-    for x,y in test:
-        for i in range(BATCH_SIZE):
-            n = x[i,:,:,0]
-            for j in range(1,CHANNELS):
-                n = np.concatenate((n,x[i,:,:,-1]),axis=0)
-
-            y_ = np.zeros((128,128))
-            print(y_.shape,y.shape,n.shape,x.shape)
-            y_[:64,:64] = y[i,:,:,0]
-            n = np.concatenate((n,y_),axis=0)
-
-            cv.imshow(windowname,n)
-            
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                    break
-    
-    exit(0)
     if laststate:
         epoch = laststate["epoch"]
         model.load_weights(laststate["modelpath"])
+        
 
         loss = model.evaluate(x=test, verbose=2)
         print("Restored model, loss: {:5.5f}".format(loss))
@@ -160,7 +160,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 10+epoch,
+                            epochs          = 100+epoch,
                             initial_epoch   = epoch,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
@@ -171,7 +171,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 10,
+                            epochs          = 100,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
 
@@ -180,8 +180,7 @@ def train():
 
 
     saveHistory(history_path,history)
-    plotHistory(history,history_path,title="ZeroInflatedPoisson NLL-loss")
-
+    plotHistory(history,history_path,title="ZeroInflatedNegativeBinomial NLL-loss")
 
 
 def eval():
@@ -192,7 +191,7 @@ def eval():
     modelname = MODELNAME
 
     values = 256
-    ones = np.ones((1,64,64,1),dtype=np.uint8)
+    ones = np.ones((1,12,12,1),dtype=np.uint8)
     value_array = np.repeat(ones,values,axis=-1)
 
     for i in range(values):
@@ -201,13 +200,15 @@ def eval():
 
     def probs(distribution):
         prob_array = np.zeros_like(value_array)
+        #print(prob_array.shape)
         for i in range(values):
-            prob_array[:,:,:,i:i+1] = distribution.prob(value_array[:,:,:,i:i+1])
+
+            #print(np.max(distribution.prob(i)),i)
+            prob_array[:,:,:,i:i+1] = distribution.prob(i)
             #prob_array[:,:,:,i:i+1] = distribution.sample()
             #print(distribution.mean())
 
-        #print(prob_array[0,0,:])
-        #print(prob_array.argmax(-1))
+        
         return prob_array
 
     model,checkpoint,modelpath,train,test = getModel()   
@@ -215,24 +216,20 @@ def eval():
     for nbr,(x,y) in enumerate(test):
         print("{:7d}|{:7d}".format(nbr,len(test)),end="\r")
         
-        y[np.where(y[:,:,:,:] > 0)] = 255
         for i in range(BATCH_SIZE):
+            
             pred = model(np.array([x[i,:,:,:]]))
             predictions.append((np.array(y[i,:,:]),probs(pred)))
             p = np.array(pred.mean())
-            #print(p)
-            print(y[i,:,:,:].max(),"\t",p.max())
-            cv.imshow(windowname,y[i,:,:,:])
+            #print(-pred.log_prob(y[i,:,:]))
+            #print(p.shape)
+            print(y[i,:,:].max(),np.max(pred.prob(y[i,:,:].max())) )
+            cv.imshow(windowname,y[i,:,:])
+            #cv.imshow(windowname,p[0,:,:])
             if cv.waitKey(25) & 0XFF == ord('q'):
                     break
 
     np.save(os.path.join(modelpath,modelname+"_predictions"),np.array(predictions))
 
-
-
-train()
 #eval()
-
-
-
-
+train()

@@ -379,7 +379,7 @@ class Dataset(Sequence):
                     label = operation(label)
         
         Y = label
-        return np.array(X),np.array(Y)
+        return np.array(X),np.array(Y)[:,:,:,0]
 
 
     def on_epoch_end(self):

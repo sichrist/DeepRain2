@@ -1,7 +1,7 @@
 #!/home/simon/anaconda3/envs/DeepRain/bin/python
 from tensorflow.keras.optimizers import Adam
 from Models.Unet import Unet
-from Models.Loss import NLL
+from Models.Loss import NLL, KLL
 from Models.Distributions import *
 from tensorflow.keras.layers import *
 from tensorflow.keras import Sequential, Model
@@ -25,13 +25,16 @@ def param_layer_ZPoisson(
                         parameters=2,
                         dense=256,
                         dropout=0.1,
-                        ouput_shape=(64,64),
+                        ouput_shape=(12,12),
                         kernel_regularizer=l2(0.01), 
                         bias_regularizer=l2(0.01)):
 
     layer = output
-    layer = MaxPooling2D((2, 2), strides=(2, 2))(layer)
-    layer = Conv2D(2, kernel_size=(3, 3), padding="same",activation="selu",
+    #layer = MaxPooling2D((2, 2), strides=(2, 2))(layer)
+    layer = Conv2D(128, 
+                    kernel_size=(5, 5), 
+                    padding="same",
+                    activation="selu",
                     kernel_regularizer=kernel_regularizer, 
                     bias_regularizer=bias_regularizer) (layer)
 
@@ -46,8 +49,9 @@ def param_layer_ZPoisson(
                     bias_initializer="glorot_uniform",
                     kernel_regularizer=kernel_regularizer, 
                     bias_regularizer=bias_regularizer)(layer_2)
+
     #layer_1      = Dropout(dropout)(layer_1)
-    #layer_1      = Dropout(dropout)(layer_1)
+    #layer_2      = Dropout(dropout)(layer_2)
     
     layer_1 = Dense(ouput_shape[0]*ouput_shape[1],
                     activation="sigmoid",
@@ -62,11 +66,11 @@ def param_layer_ZPoisson(
     return input_dist
 
 
-BATCH_SIZE = 20
-DIMENSION = (128,128)
-CHANNELS = 7
+BATCH_SIZE = 100
+DIMENSION = (16,16)
+CHANNELS = 5
 MODELPATH = "./Models_weights"
-MODELNAME = "ZeroInflatedPoisson"
+MODELNAME = "small_ZeroInflatedPoisson"
 
 
 def getModel():
@@ -85,26 +89,33 @@ def getModel():
 
 
     inputs,outputs = Unet(
+                down_channels=[64,96,128,192],
                 input_shape=(*DIMENSION,CHANNELS),
-                output_dim = 2
+                output_dim = 144,
+                kernel_regularizer = 0.01,
+                bias_regularizer = 0.01
                 )
 
-    y_transform = [cutOut([32,96,32,96])]
+    y_transform = [cutOut([2,14,2,14])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=10,
+                         timeToPred=5,
                          y_transform=y_transform)
 
 
-    outputs = param_layer_ZPoisson(outputs)
+    outputs = param_layer_ZPoisson(outputs,
+                kernel_regularizer = l2(0.0),
+                bias_regularizer = l2(0.0))
     dist_outputs = ZeroInflated_Poisson()
     outputs = dist_outputs(outputs)
 
 
+    neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     model = Model(inputs,outputs)
-    model.compile(loss=NLL,
+    model.compile(loss=neg_log_likelihood,
                   optimizer=Adam( lr= 1e-3 ))
     model.summary()
+
     modelpath_h5 = os.path.join(modelpath,
                             modelname+'-{epoch:03d}-{loss:03f}-{val_loss:03f}.h5')
 
@@ -127,29 +138,7 @@ def train():
     laststate = getBestState(modelpath,history_path)
     test.setWiggle_off()
 
-    import cv2 as cv
-    import time
-    windowname = 'OpenCvFrame'
-    cv.namedWindow(windowname)
-    cv.moveWindow(windowname,0,00)
-
-    for x,y in test:
-        for i in range(BATCH_SIZE):
-            n = x[i,:,:,0]
-            for j in range(1,CHANNELS):
-                n = np.concatenate((n,x[i,:,:,-1]),axis=0)
-
-            y_ = np.zeros((128,128))
-            print(y_.shape,y.shape,n.shape,x.shape)
-            y_[:64,:64] = y[i,:,:,0]
-            n = np.concatenate((n,y_),axis=0)
-
-            cv.imshow(windowname,n)
-            
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                    break
     
-    exit(0)
     if laststate:
         epoch = laststate["epoch"]
         model.load_weights(laststate["modelpath"])
@@ -160,7 +149,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 10+epoch,
+                            epochs          = 20+epoch,
                             initial_epoch   = epoch,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
@@ -171,7 +160,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 10,
+                            epochs          = 100,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
 
@@ -180,19 +169,19 @@ def train():
 
 
     saveHistory(history_path,history)
-    plotHistory(history,history_path,title="ZeroInflatedPoisson NLL-loss")
+    plotHistory(history,history_path,title="small ZeroInflatedPoisson NLL-loss")
 
 
 
 def eval():
-    windowname = 'OpenCvFrame'
-    cv.namedWindow(windowname)
-    cv.moveWindow(windowname,0,00)
+    #windowname = 'OpenCvFrame'
+    #cv.namedWindow(windowname)
+    #cv.moveWindow(windowname,0,00)
     modelpath = MODELPATH
     modelname = MODELNAME
 
     values = 256
-    ones = np.ones((1,64,64,1),dtype=np.uint8)
+    ones = np.ones((1,12,12,1),np.float32)
     value_array = np.repeat(ones,values,axis=-1)
 
     for i in range(values):
@@ -203,35 +192,27 @@ def eval():
         prob_array = np.zeros_like(value_array)
         for i in range(values):
             prob_array[:,:,:,i:i+1] = distribution.prob(value_array[:,:,:,i:i+1])
-            #prob_array[:,:,:,i:i+1] = distribution.sample()
-            #print(distribution.mean())
-
-        #print(prob_array[0,0,:])
-        #print(prob_array.argmax(-1))
+        print(prob_array.argmax(-1).max())
         return prob_array
 
     model,checkpoint,modelpath,train,test = getModel()   
     predictions = []
     for nbr,(x,y) in enumerate(test):
         print("{:7d}|{:7d}".format(nbr,len(test)),end="\r")
-        
-        y[np.where(y[:,:,:,:] > 0)] = 255
+
         for i in range(BATCH_SIZE):
             pred = model(np.array([x[i,:,:,:]]))
-            predictions.append((np.array(y[i,:,:]),probs(pred)))
             p = np.array(pred.mean())
-            #print(p)
-            print(y[i,:,:,:].max(),"\t",p.max())
-            cv.imshow(windowname,y[i,:,:,:])
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                    break
-
+ 
+            print(y[i,:,:].max(),np.max(pred.prob(y[i,:,:].max())) )
+            
+            
     np.save(os.path.join(modelpath,modelname+"_predictions"),np.array(predictions))
 
 
 
-train()
-#eval()
+#train()
+eval()
 
 
 

@@ -66,7 +66,7 @@ def getData(batch_size,
             channels,
             fillSteps = False,
             timeToPred = 30,
-            years = [2008,2009,2010,2011],
+            years = [2008,2009,2010,2011,2012,2013,2014,2015,2016,2017],
             split = 0.25,
             y_transform = [],
             x_transform = [],
@@ -116,15 +116,15 @@ def getData(batch_size,
             print("Creating CSV file: {:07d}/{}".format(i,len(listOfFiles)),end="\r")
             img = Image.open(path)
             img = np.array(img)
-            data_info.append([path,img.mean(),img.max()])
-        columns = ["path","mean","max"]
+            data_info.append([path,img.mean(),img.std(),img.max()])
+        columns = ["path","mean","std","max"]
 
         dframe  = pd.DataFrame(np.array(data_info),columns=columns)
         dframe.to_csv (path_to_csvfile, index = False, header=True)
     
 
     csvfile = pd.read_csv(path_to_csvfile)
-    subset = csvfile[["path","mean","max"]]
+    subset = csvfile[["path","mean","std","max"]]
     data = [tuple(x) for x in subset.to_numpy()]
 
     
@@ -218,7 +218,7 @@ class Dataset(Sequence):
         self.y_transform  = y_transform
 
         csvfile = pd.read_csv(self.csvfile)
-        subset = csvfile[["path","mean","max"]]
+        subset = csvfile[["path","mean","std","max"]]
         self.data = [tuple(x) for x in subset.to_numpy()]
         self.Wiggle = Wiggle()
         self.Wiggle_off = False
@@ -239,6 +239,7 @@ class Dataset(Sequence):
 
 
     def X_Processing(self,index):
+        
         img = cv2.imread(self.data[index][0],0)
         if not self.Wiggle_off:
             img = self.Wiggle(img)
@@ -250,12 +251,13 @@ class Dataset(Sequence):
 
 
     def Y_Processing(self,index):
-
+        
         img = cv2.imread(self.data[index][0],0)
         if not self.Wiggle_off:
             img = self.Wiggle(img)
         for t in self.y_transform:
             img = t(img)
+        #return img.flatten()
         return img
 
 
@@ -273,8 +275,30 @@ class Dataset(Sequence):
 
         
         self.Wiggle.draw()
+        #return np.array(X),np.expand_dims(Y, axis=1)
+        #return np.array(X),np.array(Y).flatten()
         return np.array(X),np.array(Y)
 
+
+
+
+    def getMean(self):
+        sum_mean = 0
+        for idx in self.indices:
+            #_,mean,_,_ = self.data[idx]
+            img = cv2.imread(self.data[idx][0],0)
+            mean = np.mean(img / 255.0)
+            sum_mean += img
+        return sum_mean / len(self.indices)
+
+    def getStd(self):
+        sum_std = 0
+        for idx in self.indices:
+            #_,_,std,_ = self.data[idx]
+            img = cv2.imread(self.data[idx][0],0)
+            #std = np.std(img / 255.0)
+            sum_std += img
+        return sum_std / (len(self.indices) -1)
 
 
     def setWiggle_off(self):
@@ -318,6 +342,8 @@ class Dataset(Sequence):
 
         X = np.transpose(X,(0,2,3,1))
         Y = np.transpose(Y,(0,2,3,1))
+        
+        
 
-        return X / 255.0,Y 
+        return X/255.0 ,Y
 

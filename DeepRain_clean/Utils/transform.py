@@ -5,6 +5,42 @@ from time import sleep
 import numpy as np
 import pandas as pd
 
+class LinBin(object):
+    
+    """docstring for LinBin"""
+    def __init__(self, divisor=12):
+        super(LinBin, self).__init__()
+        self.div = divisor
+
+    def __call__(self,img):
+        return np.ceil(img / self.div)
+
+
+class NormalizePerImage(object):
+    """docstring for NormalizePerImage"""
+    def __init__(self):
+        super(NormalizePerImage, self).__init__()
+
+    def __call__(self,img):
+        std = img.std()
+        if std == 0:
+            std = 1
+
+        return (img - img.mean()) / std
+        
+
+class Normalize(object):
+    """docstring for Normalize"""
+    def __init__(self, mean, std):
+        super(Normalize, self).__init__()
+        self.std  = std
+        self.mean = mean
+    
+    def __call__(self,img):
+        #return img / self.std
+        return (img - self.mean) / self.std
+        #return img - self.mean
+
 class Wiggle(object):
     """docstring for Wiggle"""
     def __init__(self):
@@ -72,10 +108,6 @@ class ImageToPatches(object):
         
         end_x = end_x if end_x < self.outputsize[0] else self.outputsize[0]
         end_y = end_y if end_y < self.outputsize[1] else self.outputsize[1]
-
-
-        
-
 
 
     def __call__(self,img):
@@ -198,8 +230,8 @@ def transformImages(listOfFiles,
     for i,path in enumerate(newListOfFiles):
         print("Creating CSV file: {:07d}/{}".format(i,len(newListOfFiles)),end="\r")
         img = cv2.imread(path,0)
-        data_info.append([path,img.mean(),img.max()])
-        columns = ["path","mean","max"]
+        data_info.append([path,img.mean(),img.std(),img.max()])
+        columns = ["path","mean","std","max"]
 
     dframe  = pd.DataFrame(np.array(data_info),columns=columns)
     #dframe.to_csv(path_to_csvfile, index = False, header=True)

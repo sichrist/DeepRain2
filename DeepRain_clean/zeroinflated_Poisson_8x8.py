@@ -1,110 +1,150 @@
 #!/home/simon/anaconda3/envs/DeepRain/bin/python
 from tensorflow.keras.optimizers import Adam
-from Models.Unet import Unet
 from Models.Loss import NLL
 from Models.Distributions import *
+from Models.Utils import *
 from tensorflow.keras.layers import *
 from tensorflow.keras import Sequential, Model
 from Utils.Dataset import getData
 from Utils.transform import cutOut
 from tensorflow.keras.callbacks import *
-from Models.Utils import *
 from tensorflow.keras.models import load_model
 from tensorflow.keras.regularizers import l2
 import os
 import cv2 as cv
-import numpy as np
+
+import tensorflow_probability as tfp
+
+tfk = tf.keras
+tfkl = tf.keras.layers
+tfpl = tfp.layers
+tfd = tfp.distributions
 
 physical_devices = tf.config.list_physical_devices('GPU')
 print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-def param_layer_ZPoisson(
-                        output,
-                        parameters=2,
-                        dense=256,
-                        dropout=0.1,
-                        ouput_shape=(64,64),
-                        kernel_regularizer=l2(0.01), 
-                        bias_regularizer=l2(0.01)):
+BATCH_SIZE = 1
+DIMENSION = (16,16)
+CHANNELS = 5
+MODELPATH = "./Models_weights"
+MODELNAME = "zeroinflated_Poisson_8x8"
 
-    layer = output
-    layer = MaxPooling2D((2, 2), strides=(2, 2))(layer)
-    layer = Conv2D(2, kernel_size=(3, 3), padding="same",activation="selu",
-                    kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer) (layer)
+
+
+def simpleUnet(input_shape,
+           n_predictions=1,
+           simpleclassification=None,
+           flatten_output=False,
+           activation_hidden="relu",
+           activation_output="relu"):
+
+
+    encoded_size = 8*8
+
+    inputs = Input(shape=input_shape) 
+
+    conv01 = Conv2D(10, kernel_size=(3, 3), padding="same")(inputs)       # 10 x 64x64
+    conv01 = Activation(activation_hidden)(conv01)
+    conv01_pool = MaxPooling2D((2, 2), strides=(2, 2))(conv01)            # 10 x 32x32
+
+
+    conv02 = Conv2D(20, kernel_size=(3, 3), padding="same")(conv01_pool)  # 20 x 32x32
+    conv02 = Activation(activation_hidden)(conv02)
+    conv02_pool = MaxPooling2D((2, 2), strides=(2, 2))(conv02)            # 20 x 16x16
+
+
+    conv03 = Conv2D(20, kernel_size=(3, 3), padding="same")(conv02_pool)  # 20 x 16x16
+    conv03 = Activation(activation_hidden)(conv03)
+    conv03_pool = MaxPooling2D((2, 2), strides=(2, 2))(conv03)            # 20 x 8x8
+
+
+    conv04 = Conv2D(20, kernel_size=(3, 3), padding="same")(conv03_pool)  # 20 x 8x8
+    conv04 = Activation(activation_hidden)(conv04)
+    conv04_pool = MaxPooling2D((2, 2), strides=(2, 2))(conv04)            # 20 x 4x4
+
+
+    ### UPSAMPLING:
+    up04 = UpSampling2D((2, 2))(conv04_pool)    # 20 x 8x8
+    up04 = concatenate([conv04, up04], axis=3)  # 20+20 x 8x8
+
+
+    up03 = UpSampling2D((2, 2))(up04)           # 40 x 16x16
+    up03 = concatenate([conv03, up03], axis=3)  # 20+40 x 16x16
+
+
+    up02 = UpSampling2D((2, 2))(up03)           # 60 x 32x32
+    up02 = concatenate([conv02, up02], axis=3)  # 20+60 x 32x32
+
+
+    up01 = UpSampling2D((2, 2))(up02)           # 80 x 64x64
+    up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
+
+    
+    layer = Conv2D(2, (1, 1), activation="linear")(up01)  # 1 x 64x64
 
     layer_1 = Flatten()(layer[:,:,:,:1])
     layer_2 = Flatten()(layer[:,:,:,1:2])
-    
-    layer_1      = Dense(dense,
-                    bias_initializer="glorot_uniform",
-                    kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer)(layer_1)
-    layer_2      = Dense(dense,
-                    bias_initializer="glorot_uniform",
-                    kernel_regularizer=kernel_regularizer, 
-                    bias_regularizer=bias_regularizer)(layer_2)
-    #layer_1      = Dropout(dropout)(layer_1)
-    #layer_1      = Dropout(dropout)(layer_1)
-    
-    layer_1 = Dense(ouput_shape[0]*ouput_shape[1],
-                    activation="sigmoid",
-                    bias_initializer="glorot_uniform")(layer_1)
-    layer_2 = Dense(ouput_shape[0]*ouput_shape[1],
-                    activation="relu",
-                    bias_initializer="glorot_uniform")(layer_2)
-    layer_1 = tf.keras.layers.Reshape((*ouput_shape,1))(layer_1)
-    layer_2 = tf.keras.layers.Reshape((*ouput_shape,1))(layer_2)
+    layer_1 = Dropout(0.25)(layer_1)
+    layer_2 = Dropout(0.25)(layer_2)
+    layer_1 = Dense(8*8,activation="relu")(layer_1)
+    layer_2 = Dense(8*8,activation="relu")(layer_2)
+    layer_1 = tf.keras.layers.Reshape((8,8,1))(layer_1)
+    layer_2 = tf.keras.layers.Reshape((8,8,1))(layer_2)
     input_dist= tf.concat([layer_1,layer_2],axis=-1)
 
-    return input_dist
+    output_dist = tfp.layers.DistributionLambda(
+        name="DistributionLayer",
+        make_distribution_fn=lambda t:
+        tfp.distributions.Independent(
+            tfd.Mixture(
+            cat=tfd.Categorical(tf.stack([1-t[...,:1], t[...,:1]],axis=-1)),
+            components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
+            tfd.Poisson(rate=tf.math.softplus(t[...,1:2]))]),
+        name="ZeroInflated_Poisson",reinterpreted_batch_ndims=0 ))
+    
+    
+    output = output_dist(input_dist)
+    model = Model(inputs=inputs, outputs=output)
+    return model
 
-
-BATCH_SIZE = 20
-DIMENSION = (128,128)
-CHANNELS = 7
-MODELPATH = "./Models_weights"
-MODELNAME = "ZeroInflatedPoisson"
 
 
 def getModel():
-
     modelpath = MODELPATH
     modelname = MODELNAME
+
+    
     if not os.path.exists(modelpath):
-        os.mkdir(modelpath)
+            os.mkdir(modelpath)
 
     modelpath = os.path.join(modelpath,modelname)
 
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
+    
+    input_shape = (*DIMENSION,CHANNELS)
 
 
-
-    inputs,outputs = Unet(
-                input_shape=(*DIMENSION,CHANNELS),
-                output_dim = 2
+    model = simpleUnet(
+                input_shape=input_shape
                 )
 
-    y_transform = [cutOut([32,96,32,96])]
+
+    y_transform = [cutOut([4,12,4,12])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=10,
+                         timeToPred=5,
                          y_transform=y_transform)
 
 
-    outputs = param_layer_ZPoisson(outputs)
-    dist_outputs = ZeroInflated_Poisson()
-    outputs = dist_outputs(outputs)
-
-
-    model = Model(inputs,outputs)
-    model.compile(loss=NLL,
-                  optimizer=Adam( lr= 1e-3 ))
+    neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
+    model.compile(loss=neg_log_likelihood,
+                  optimizer=Adam( lr= 1e-2 ))
     model.summary()
+    
     modelpath_h5 = os.path.join(modelpath,
                             modelname+'-{epoch:03d}-{loss:03f}-{val_loss:03f}.h5')
 
@@ -116,43 +156,23 @@ def getModel():
 
     return model,checkpoint,modelpath,train,test
 
-
 def train():
     modelpath = MODELPATH
     modelname = MODELNAME
 
     model,checkpoint,modelpath,train,test = getModel()
 
+    print(model(train[0][0]))
+
     history_path = os.path.join(modelpath,modelname+"_history")
     laststate = getBestState(modelpath,history_path)
     test.setWiggle_off()
+    #train.setWiggle_off()
 
-    import cv2 as cv
-    import time
-    windowname = 'OpenCvFrame'
-    cv.namedWindow(windowname)
-    cv.moveWindow(windowname,0,00)
-
-    for x,y in test:
-        for i in range(BATCH_SIZE):
-            n = x[i,:,:,0]
-            for j in range(1,CHANNELS):
-                n = np.concatenate((n,x[i,:,:,-1]),axis=0)
-
-            y_ = np.zeros((128,128))
-            print(y_.shape,y.shape,n.shape,x.shape)
-            y_[:64,:64] = y[i,:,:,0]
-            n = np.concatenate((n,y_),axis=0)
-
-            cv.imshow(windowname,n)
-            
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                    break
-    
-    exit(0)
     if laststate:
         epoch = laststate["epoch"]
         model.load_weights(laststate["modelpath"])
+        
 
         loss = model.evaluate(x=test, verbose=2)
         print("Restored model, loss: {:5.5f}".format(loss))
@@ -183,16 +203,17 @@ def train():
     plotHistory(history,history_path,title="ZeroInflatedPoisson NLL-loss")
 
 
+#train()
 
 def eval():
-    windowname = 'OpenCvFrame'
-    cv.namedWindow(windowname)
-    cv.moveWindow(windowname,0,00)
+    #windowname = 'OpenCvFrame'
+    #cv.namedWindow(windowname)
+    #cv.moveWindow(windowname,0,00)
     modelpath = MODELPATH
     modelname = MODELNAME
 
     values = 256
-    ones = np.ones((1,64,64,1),dtype=np.uint8)
+    ones = np.ones((1,12,12,1),np.float32)
     value_array = np.repeat(ones,values,axis=-1)
 
     for i in range(values):
@@ -203,36 +224,24 @@ def eval():
         prob_array = np.zeros_like(value_array)
         for i in range(values):
             prob_array[:,:,:,i:i+1] = distribution.prob(value_array[:,:,:,i:i+1])
-            #prob_array[:,:,:,i:i+1] = distribution.sample()
-            #print(distribution.mean())
-
-        #print(prob_array[0,0,:])
-        #print(prob_array.argmax(-1))
+        print(prob_array.argmax(axis=-1).max())
         return prob_array
 
     model,checkpoint,modelpath,train,test = getModel()   
     predictions = []
     for nbr,(x,y) in enumerate(test):
         print("{:7d}|{:7d}".format(nbr,len(test)),end="\r")
-        
-        y[np.where(y[:,:,:,:] > 0)] = 255
+
         for i in range(BATCH_SIZE):
             pred = model(np.array([x[i,:,:,:]]))
-            predictions.append((np.array(y[i,:,:]),probs(pred)))
             p = np.array(pred.mean())
-            #print(p)
-            print(y[i,:,:,:].max(),"\t",p.max())
-            cv.imshow(windowname,y[i,:,:,:])
-            if cv.waitKey(25) & 0XFF == ord('q'):
-                    break
-
+            #probs(pred)
+            print(y[i,:].max(),np.min(pred.cdf(np.ones_like(y[i,:]) * 0 )) )
+            
+            
     np.save(os.path.join(modelpath,modelname+"_predictions"),np.array(predictions))
 
 
 
-train()
-#eval()
-
-
-
-
+#train()
+eval()
