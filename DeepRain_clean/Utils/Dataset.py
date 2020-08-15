@@ -9,6 +9,7 @@ import tarfile
 import re
 import cv2
 from .transform import ImageToPatches, transformImages, cutOut, Wiggle
+from .URL import YEARS
 
 
 KONSTANCE  = (800,430)
