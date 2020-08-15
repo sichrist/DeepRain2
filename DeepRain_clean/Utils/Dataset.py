@@ -10,16 +10,6 @@ import re
 import cv2
 from .transform import ImageToPatches, transformImages, cutOut, Wiggle
 
-YEARS = {"2008":"https://nx11827.your-storageshare.de/s/WbBCL3sWoDMQXZk/download",
-         "2009":"https://nx11827.your-storageshare.de/s/4gasq9P4nE8SNAL/download",
-         "2010":"https://nx11827.your-storageshare.de/s/7yX7aHgiN64pyq4/download",
-         "2011":"https://nx11827.your-storageshare.de/s/KYJR8mCYeYXBjiJ/download",
-         "2012":"https://nx11827.your-storageshare.de/s/iLGdFxA2aRWTP8s/download",
-         "2013":"https://nx11827.your-storageshare.de/s/FwECnjCTPHqciQH/download",
-         "2014":"https://nx11827.your-storageshare.de/s/XayDfnaeiHxbXCD/download",
-         "2015":"https://nx11827.your-storageshare.de/s/JD6irxjtAnGS3oZ/download",
-         "2016":"https://nx11827.your-storageshare.de/s/9g5XSGJf5wdStAw/download",
-         "2017":"https://nx11827.your-storageshare.de/s/GPccN6szqibWKga/download"}
 
 KONSTANCE  = (800,430)
 DATAFOLDER = "./Data"
@@ -343,7 +333,5 @@ class Dataset(Sequence):
         X = np.transpose(X,(0,2,3,1))
         Y = np.transpose(Y,(0,2,3,1))
         
-        
-
         return X/255.0 ,Y
 

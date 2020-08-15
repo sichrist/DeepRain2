@@ -97,7 +97,7 @@ def ZeroInflated_negativ_Binomial(input_shape,
     prob = tf.keras.layers.Reshape((64,64,1))(prob)
 
     
-    input_dist= tf.concat([cat,count,prob],axis=-1)
+    input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
 
     output_dist = tfp.layers.DistributionLambda(
         name="DistributionLayer",
@@ -115,7 +115,7 @@ def ZeroInflated_negativ_Binomial(input_shape,
     model = Model(inputs=inputs, outputs=output)
     return model
 
-def getModel():
+def getModel(compile_ = True):
 
     modelpath = MODELPATH
     modelname = MODELNAME
@@ -139,7 +139,8 @@ def getModel():
 
     model = ZeroInflated_negativ_Binomial(input_shape=input_shape)
 
-
+    if compile_ == False:
+        return model,modelpath,train,test
     neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     
     model.compile(loss=neg_log_likelihood,
@@ -241,5 +242,5 @@ def eval():
 
 
 
-train()
+#train()
 #eval()

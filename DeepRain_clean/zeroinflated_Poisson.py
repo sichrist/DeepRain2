@@ -101,7 +101,7 @@ def simpleUnet(input_shape,
     return model
 
 
-def getModel():
+def getModel(compile_ = True):
     modelpath = MODELPATH
     modelname = MODELNAME
 
@@ -130,7 +130,8 @@ def getModel():
                          timeToPred=10,
                          x_transform=x_transform)
     
-
+    if compile_ == False:
+        return model,modelpath,train,test
     neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     
     model.compile(loss=neg_log_likelihood,
@@ -234,5 +235,5 @@ def eval():
 
 
 
-train()
+#train()
 #eval()
