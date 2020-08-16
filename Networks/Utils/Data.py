@@ -5,7 +5,7 @@ import pandas as pd
 import re
 import keras
 import os
-from .transform import transformImages,resize
+from .transform import transformImages,resize,LinearMapping
 import cv2
 from Utils.colors import *
 from tensorflow.python.keras.utils.data_utils import Sequence
@@ -162,6 +162,7 @@ def prepareListOfFiles(path,workingdir = WRKDIR,nameOfCsvFile=CSVFILE,sortOut=Fa
         listOfFiles = getListOfFiles(path)
         listOfFiles.sort()
 
+
         if onlyUseYears:
             newlist = []
             prefix = "YW2017.002_"
@@ -224,7 +225,7 @@ class Dataset(Sequence):
                       shuffle=True,
                       saveListOfFiles=CSVFILE,
                       workingdir=WRKDIR,
-                      timeToPred = 5,
+                      timeToPred = 30,
                       timeSteps = 5,
                       sequenceExist = False,
                       flatten = False,
@@ -259,7 +260,7 @@ class Dataset(Sequence):
         self.steps      = int(timeToPred / timeSteps)
         self.datatype   = dtype
         self.flatten    = flatten
-        self.sortOut    = True
+        self.sortOut    = sortOut
         self.lstm       = lstm
         self.transform  = transform
         self.preTransformation  = preTransformation
@@ -303,7 +304,7 @@ class Dataset(Sequence):
 
      
         self.new_listOfFiles = transformImages(self.listOfFiles,self.preTransformation,os.path.join(workingdir,savefolder),saveListOfFiles)
-
+        
         if len(self.new_listOfFiles) != len(self.listOfFiles):
             print(YELLOW + "WARNING: Length of lists does not match! " + RESET)
             print(YELLOW +"To stop this warning, delete {} folder and restart".format(os.path.join(workingdir,savefolder))+RESET)
@@ -334,20 +335,23 @@ class Dataset(Sequence):
                 if img.max() > 0:
                     y.append(i)
             return y
+
         if self.sortOut:
             self.indizes = sortOut(self.listOfFiles)
+            print("SORTTING OUUUT",len(self.indizes))
 
         
-        self.indizes = self.indizes[:40]
+        #self.indizes = self.indizes[:50]
+        #self.linearmap = LinearMapping()
 
     def __data_generation(self,index):
+
         X = []
         Y = []
         
         for i,id in enumerate(range(index,index+self.n_channels)):
             
             img = np.array(Image.open(self.listOfFiles[id]))
-            
             assert img.shape == self.dim, \
             "[Error] (Data generation) Image shape {} does not match dimension {}".format(img.shape,self.dim)            
 
@@ -420,7 +424,10 @@ class Dataset(Sequence):
         Y = np.transpose(Y,(0,2,3,1))
         if self.transform is not None:
                         
+            
             return X/255.0,Y
+            #return X/255.0,Y
+            #return X,Y
 
             #return X/255.0,Y/255.0
         if not self.flatten:
@@ -430,8 +437,9 @@ class Dataset(Sequence):
            return X/255,Y.flatten()
 
 
-        return X/255.0,Y
+        #return X,Y
+        #return X/255.0,Y
 
-        #return X/255.0,Y/255.0
+        return X/255.0,Y
         
         

@@ -77,7 +77,7 @@ if laststate:
     history = model.fit(train,
                         validation_data = test,
                         shuffle         = True,
-                        epochs          = 20+epoch,
+                        epochs          = 65+epoch,
                         initial_epoch   = epoch,
                         batch_size      = BATCH_SIZE,
                         callbacks       = checkpoint)

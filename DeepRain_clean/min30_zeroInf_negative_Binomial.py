@@ -135,8 +135,6 @@ def getModel(compile_ = True):
                          timeToPred=30,
                          y_transform=y_transform)
 
-    print(train.getMean())
-    print(train.getStd())
                          #x_transform=x_transform)
 
     input_shape = (*DIMENSION,CHANNELS)
@@ -184,7 +182,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 20+epoch,
+                            epochs          = 45+epoch,
                             initial_epoch   = epoch,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
@@ -246,5 +244,5 @@ def eval():
 
 
 
-train()
+#train()
 #eval()

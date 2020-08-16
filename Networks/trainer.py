@@ -154,6 +154,7 @@ class Trainer(object):
                                       verbose = 1,
                                       callbacks=self.checkpoint,
                                       shuffle=False)    # Shuffle needs to be False, cause of shuffle buffer
+
         if self.history is None:
             self.history = history.history
         else:

@@ -187,7 +187,7 @@ def save(data,path):
 def load(path):
     return np.load(path,allow_pickle=True)
 
-def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
+def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial,x_transform=[],y_transform=[]):
 
     nbrProcesses = cpu_count() * 2
     procCtr = 0
@@ -220,7 +220,13 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
         with tf.device("/cpu:0"):           
             
             for i in range(batch_size):
-                data_x.append(x[i,:,:,:])
+                if x_transform:
+                    new = x[i,:,:,:]
+                    for t in x_transform:
+                        new_x = t(x[i,:,:,:])
+                    data_x.append(new_x)
+                else:
+                    data_x.append(x[i,:,:,:])
                 data_y.append(y[i,:,:,:])
                 data_p.append(p[i,:,:,:])
                 
@@ -228,7 +234,7 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
                 continue
         
 
-            data_path = os.path.join(savedir,"Data_"+str(procCtr))
+            
             data = [data_x,data_y,data_p]
             returnQueue[procCtr] = Queue()
         
