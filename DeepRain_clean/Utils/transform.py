@@ -48,7 +48,7 @@ class Wiggle(object):
         self.draw()
         
     def draw(self):
-        self.wiggle_idx = np.random.randint(low=1,high=4,size=2)
+        self.wiggle_idx = np.random.randint(low=0,high=10,size=2)
 
 
     def __call__(self,img):

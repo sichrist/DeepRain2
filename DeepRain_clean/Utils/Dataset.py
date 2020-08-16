@@ -334,5 +334,5 @@ class Dataset(Sequence):
         X = np.transpose(X,(0,2,3,1))
         Y = np.transpose(Y,(0,2,3,1))
         
-        return X/255.0 ,Y
+        return X/255.0 ,Y/1.0
 

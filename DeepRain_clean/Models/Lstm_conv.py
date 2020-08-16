@@ -140,3 +140,49 @@ def CNN_LSTM(input_shape):
     model = Model(inputs=inputs, outputs=output)
 
     return model
+
+def CNN_LSTM(input_shape):
+    inputs      = Input(shape=input_shape)
+    inception_1 = inception_v2(inputs,input_shape[-1])
+    lstm_conv1 = lstmLayer(inception_1,filters = [2,5,1])
+
+    inception_2 = inception_v2(inception_1,64)
+    inception_3 = inception_v2(inception_2,32)
+    inception_4 = inception_v2(inception_2,16)
+    #lstm_conv2 = lstmLayer(inception_4,filters = [3,5,1])
+
+    layer = tf.concat([lstm_conv1,inception_4],axis=-1,name="ConcatLayer")
+    layer = inception_v2(layer,40)
+    layer = SeparableConv2D(2,kernel_size=(3,3))(layer)
+
+
+    cat = Flatten()(layer[:,:,:,:1])
+    prob = Flatten()(layer[:,:,:,1:])
+    
+    cat      = Dense(64)(cat)
+    prob      = Dense(64)(prob)
+    
+    
+    cat = Dense(64*64,activation="sigmoid")(cat)
+    prob = Dense(64*64,activation="sigmoid")(prob)
+    
+    cat = tf.keras.layers.Reshape((64,64,1))(cat)
+    count = tf.keras.layers.Reshape((64,64,1))(count)
+    prob = tf.keras.layers.Reshape((64,64,1))(prob)
+ 
+    
+    input_dist= tf.concat([cat,prob],axis=-1,name="ConcatLayer")
+
+    def ZeroInflated_Poisson():
+    return tfp.layers.DistributionLambda(
+          name="DistributionLayer",
+          make_distribution_fn=lambda t: tfp.distributions.Independent(
+          tfd.Mixture(
+              cat=tfd.Categorical(probs=tf.stack([1-t[...,0:1], t[...,0:1]],axis=-1)),
+              components=[tfd.Deterministic(loc=tf.zeros_like(t[...,0:1])),
+              tfd.Poisson(rate=tf.math.softplus(t[...,1:2]))]),
+          name="ZeroInflated",reinterpreted_batch_ndims=0 ))
+    output = output_dist(input_dist)
+    model = Model(inputs=inputs, outputs=output)
+
+    return model

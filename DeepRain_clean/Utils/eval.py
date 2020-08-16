@@ -189,7 +189,6 @@ def load(path):
 
 def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
 
-    savedir = "tmp_eval"
     nbrProcesses = cpu_count() * 2
     procCtr = 0
     return_dict = {}
@@ -207,12 +206,10 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
     j=0
     l = len(test)
 
-    if not os.path.exists(savedir):
-        os.mkdir(savedir)
 
     confusionMat = None
     returnQueue = {}
-    #returnQueue = Queue()
+    
     for i,(x,y) in enumerate(test):
         clear_session()
         
@@ -220,10 +217,7 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial):
             p = model(x[:,:,:,:],training=False)
         
         
-        with tf.device("/cpu:0"):
-            if np.isnan(p).any():
-                print("NAN ALARM")
-            
+        with tf.device("/cpu:0"):           
             
             for i in range(batch_size):
                 data_x.append(x[i,:,:,:])
