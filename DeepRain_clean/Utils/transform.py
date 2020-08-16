@@ -48,14 +48,33 @@ class Wiggle(object):
         self.draw()
         
     def draw(self):
-        self.wiggle_idx = np.random.randint(low=0,high=10,size=2)
+        self.wiggle_idx = np.random.randint(low=-10,high=10,size=2)
 
 
     def __call__(self,img):
         newarray = np.zeros_like(img)
         x,y = img.shape[:2]
-        newarray[:x-self.wiggle_idx[0],:y-self.wiggle_idx[1]] = \
-             img[self.wiggle_idx[0]:,self.wiggle_idx[1]:]
+
+        x_shift = self.wiggle_idx[0]
+        y_shift = self.wiggle_idx[1]
+        
+
+        if x_shift >= 0 and y_shift >= 0:
+            newarray[:x-x_shift,:y-y_shift] = \
+                 img[x_shift:,y_shift:]
+        elif x_shift <= 0 and y_shift >= 0:
+            
+            newarray[-x_shift:,:y-y_shift] = \
+                 img[:x_shift,y_shift:]
+        elif x_shift >= 0 and y_shift <= 0:
+            
+            newarray[:x-x_shift,-y_shift:] = \
+                 img[x_shift:,:y_shift]
+        else:
+            
+            newarray[-x_shift:,-y_shift:] = \
+                 img[:x_shift,:y_shift]
+
         return newarray
 
 

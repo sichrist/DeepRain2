@@ -22,7 +22,7 @@ gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
 BATCH_SIZE = 50
-DIMENSION = (64,64)
+DIMENSION = (96,96)
 CHANNELS = 5
 MODELPATH = "./Models_weights"
 MODELNAME = "30min_LSTM_zPoisson"
@@ -37,17 +37,19 @@ modelpath = os.path.join(modelpath,modelname)
 
 if not os.path.exists(modelpath):
     os.mkdir(modelpath)
-
-x_transform = [Normalize(0.007742631458799244, 0.015872015890555563 )]
+y_transform = [cutOut([16,80,16,80])]
+#x_transform = [Normalize(0.007742631458799244, 0.015872015890555563 )]
 train,test = getData(BATCH_SIZE,
                      DIMENSION,CHANNELS,
                      timeToPred=30,
-                     x_transform=x_transform)
+                     keep_sequences = True,
+                     y_transform=y_transform)
+
 
 neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
 
 
-model = CNN_LSTM((*DIMENSION,CHANNELS))
+model = CNN_LSTM_Poisson((*DIMENSION,CHANNELS))
 model.compile(loss=neg_log_likelihood,
               optimizer=Adam( lr= 1e-4 ))
 model.summary()
@@ -88,7 +90,7 @@ else:
     history = model.fit(train,
                         validation_data = test,
                         shuffle         = True,
-                        epochs          = 20,
+                        epochs          = 5,
                         batch_size      = BATCH_SIZE,
                         callbacks       = checkpoint)
 

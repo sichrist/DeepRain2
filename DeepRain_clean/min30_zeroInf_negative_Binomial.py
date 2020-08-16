@@ -128,7 +128,7 @@ def getModel(compile_ = True):
         os.mkdir(modelpath)
 
 
-    x_transform = [Normalize(0.007742631458799244, 0.015872015890555563 )]
+    
     y_transform = [cutOut([16,80,16,80])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,

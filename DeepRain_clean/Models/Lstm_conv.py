@@ -93,29 +93,30 @@ def lstmLayer(inp,filters = [5,5],activation="selu"):
 def CNN_LSTM(input_shape):
     inputs      = Input(shape=input_shape)
     inception_1 = inception_v2(inputs,input_shape[-1])
-    lstm_conv1 = lstmLayer(inception_1,filters = [2,5,1])
+    lstm_conv1 = lstmLayer(inception_1,filters = [5,5,5])
 
-    inception_2 = inception_v2(inception_1,64)
-    inception_3 = inception_v2(inception_2,32)
-    inception_4 = inception_v2(inception_2,16)
+    inception_2 = inception_v2(inception_1,16)
+    inception_3 = inception_v2(inception_2,16)
+    inception_4 = inception_v2(inception_3,16)
     #lstm_conv2 = lstmLayer(inception_4,filters = [3,5,1])
 
     layer = tf.concat([lstm_conv1,inception_4],axis=-1,name="ConcatLayer")
-    layer = inception_v2(layer,40)
-    layer = SeparableConv2D(3,kernel_size=(3,3))(layer)
+    layer = inception_v2(layer,3)
+    layer = Conv2D(3,kernel_size=(7,7))(layer)
+    layer = Conv2D(3,kernel_size=(7,7))(layer)
 
 
     cat = Flatten()(layer[:,:,:,:1])
     count = Flatten()(layer[:,:,:,1:2])
     prob = Flatten()(layer[:,:,:,2:])
     
-    cat      = Dense(64)(cat)
-    count      = Dense(64)(count)
-    prob      = Dense(64)(prob)
+    cat      = Dense(128)(cat)
+    count      = Dense(128)(count)
+    prob      = Dense(128)(prob)
     
     
     cat = Dense(64*64,activation="sigmoid")(cat)
-    count = Dense(64*64,activation="relu")(count)
+    count = Dense(64*64,activation="selu")(count)
     prob = Dense(64*64,activation="sigmoid")(prob)
     
     cat = tf.keras.layers.Reshape((64,64,1))(cat)
@@ -144,35 +145,41 @@ def CNN_LSTM(input_shape):
 def CNN_LSTM_Poisson(input_shape):
     inputs      = Input(shape=input_shape)
     inception_1 = inception_v2(inputs,input_shape[-1])
-    lstm_conv1 = lstmLayer(inception_1,filters = [2,5,1])
 
-    inception_2 = inception_v2(inception_1,64)
-    inception_3 = inception_v2(inception_2,32)
-    inception_4 = inception_v2(inception_2,16)
+    inception_2 = inception_v2(inception_1,16)
+
+    inception_1_2 = inception_v2(inputs,input_shape[-1])
+    inception_2_2 = inception_v2(inception_1_2,16)
     
-    layer = tf.concat([lstm_conv1,inception_4],axis=-1,name="ConcatLayer")    
-    layer = inception_v2(layer,3)
-    layer = Conv2D(3,kernel_size=(7,7))(layer)
-    layer = Conv2D(3,kernel_size=(7,7))(layer)
-    layer = Conv2D(3,kernel_size=(5,5))(layer)
 
+    layer = tf.concat([inception_2_2,inception_2],axis=-1,name="ConcatLayer")
+    layer = inception_v2(layer,5)
+    layer = Conv2D(6,kernel_size=(5,5))(layer)
+    layer = Conv2D(6,kernel_size=(5,5))(layer)
+    layer = Conv2D(6,kernel_size=(5,5))(layer)
+    layer = Conv2D(5,kernel_size=(5,5))(layer)
+    layer = lstmLayer(layer,filters = [5,3,2])
 
+    
     cat = Flatten()(layer[:,:,:,:1])
-    prob = Flatten()(layer[:,:,:,1:])
+    count = Flatten()(layer[:,:,:,1:])
+
     
-    cat      = Dense(128)(cat)
-    prob      = Dense(128)(prob)
+    cat      = Dense(256)(cat)
+    count      = Dense(256)(count)
+
     
     
     cat = Dense(64*64,activation="sigmoid")(cat)
-    prob = Dense(64*64,activation="sigmoid")(prob)
+    count = Dense(64*64,activation="selu")(count)
+
     
     cat = tf.keras.layers.Reshape((64,64,1))(cat)
     count = tf.keras.layers.Reshape((64,64,1))(count)
-    prob = tf.keras.layers.Reshape((64,64,1))(prob)
  
     
-    input_dist= tf.concat([cat,prob],axis=-1,name="ConcatLayer")
+    input_dist= tf.concat([cat,count],axis=-1,name="ConcatLayer")
+ 
 
     def ZeroInflated_Poisson():
       return tfp.layers.DistributionLambda(

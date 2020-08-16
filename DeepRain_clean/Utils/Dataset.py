@@ -31,6 +31,11 @@ def yearExists(year):
             return True
     return False
 
+def llist_to_list(group):
+    n_list = []
+    for p in group:
+        n_list +=  p
+    return n_list
 
 def getListOfFiles(path):
     """
@@ -52,6 +57,32 @@ def getListOfFiles(path):
     return files
 
 
+def cluster(data, maxgap):
+    """
+    Stolen from :
+
+    https://stackoverflow.com/questions/14783947/grouping-clustering-numbers-in-python
+
+    """
+    '''Arrange data into groups where successive elements
+       differ by no more than *maxgap*
+
+        >>> cluster([1, 6, 9, 100, 102, 105, 109, 134, 139], maxgap=10)
+        [[1, 6, 9], [100, 102, 105, 109], [134, 139]]
+
+        >>> cluster([1, 6, 9, 99, 100, 102, 105, 134, 139, 141], maxgap=10)
+        [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
+
+    '''
+    data.sort()
+    groups = [[data[0]]]
+    for x in data[1:]:
+        if abs(x - groups[-1][-1]) <= maxgap:
+            groups[-1].append(x)
+        else:
+            groups.append([x])
+    return groups
+
 def getData(batch_size,
             dimension,
             channels,
@@ -61,7 +92,8 @@ def getData(batch_size,
             split = 0.25,
             y_transform = [],
             x_transform = [],
-            sortOut = True):
+            sortOut = True,
+            keep_sequences = False):
 
     # Download and extract files
     for key in years:
@@ -165,7 +197,8 @@ def getData(batch_size,
                     fillSteps  = fillSteps,
                     sortOut    = sortOut,
                     y_transform = y_transform,
-                    x_transform = x_transform)
+                    x_transform = x_transform,
+                    keep_sequences = keep_sequences)
 
     test = Dataset(batch_size,
                     dimension,
@@ -175,7 +208,8 @@ def getData(batch_size,
                     fillSteps  = fillSteps,
                     sortOut    = sortOut,
                     y_transform = y_transform,
-                    x_transform = x_transform)
+                    x_transform = x_transform,
+                    keep_sequences = keep_sequences)
 
     return train,test
 
@@ -193,7 +227,8 @@ class Dataset(Sequence):
                  years = [2008],
                  sortOut = False,
                  y_transform = [],
-                 x_transform = []):
+                 x_transform = [],
+                 keep_sequences = False):
 
         self.batch_size   = batch_size
         self.channels     = channels
@@ -207,13 +242,15 @@ class Dataset(Sequence):
         self.sortOut      = sortOut
         self.x_transform  = x_transform
         self.y_transform  = y_transform
-
         csvfile = pd.read_csv(self.csvfile)
         subset = csvfile[["path","mean","std","max"]]
         self.data = [tuple(x) for x in subset.to_numpy()]
         self.Wiggle = Wiggle()
         self.Wiggle_off = False
-        #self.data = self.data[:500]
+        
+        #self.keep_sequence = keep_sequences
+        self.keep_sequence = True
+
 
 
         if self.sortOut:
@@ -228,6 +265,13 @@ class Dataset(Sequence):
                 - self.label_Offset \
                 - self.channels)]
 
+        if self.keep_sequence:
+            self.indices_copy = self.indices.copy()
+            groups_list = cluster(self.indices_copy,1)
+            """ remove sequences < channelsize """
+            self.grouped = [ x for x in groups_list if len(x) >= self.channels]
+            self.indices = llist_to_list(self.grouped)
+            
 
     def X_Processing(self,index):
         
@@ -265,9 +309,8 @@ class Dataset(Sequence):
             Y = [self.Y_Processing(i) for i in range(end,end+self.label_Offset)]
 
         
-        self.Wiggle.draw()
-        #return np.array(X),np.expand_dims(Y, axis=1)
-        #return np.array(X),np.array(Y).flatten()
+        #self.Wiggle.draw()
+        
         return np.array(X),np.array(Y)
 
 
@@ -299,7 +342,13 @@ class Dataset(Sequence):
         self.Wiggle_off = False
 
     def on_epoch_end(self):
-        np.random.shuffle(self.indices)
+        self.Wiggle.draw()
+        if self.keep_sequence:
+            grouped = self.grouped.copy()
+            np.random.shuffle(grouped)
+            self.indices = llist_to_list(grouped)
+        else:
+            np.random.shuffle(self.indices)
 
 
     def __len__(self):
