@@ -15,6 +15,15 @@ class LinBin(object):
     def __call__(self,img):
         return np.ceil(img / self.div)
 
+class LogBin(object):
+    """docstring for LogBin"""
+    def __init__(self):
+        super(LogBin, self).__init__()
+        
+    def __call__(self,img):
+        return np.ceil(np.log(img +1.0))
+    
+        
 
 class NormalizePerImage(object):
     """docstring for NormalizePerImage"""

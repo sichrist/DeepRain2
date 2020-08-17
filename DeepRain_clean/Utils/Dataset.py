@@ -248,8 +248,8 @@ class Dataset(Sequence):
         self.Wiggle = Wiggle()
         self.Wiggle_off = False
         
-        #self.keep_sequence = keep_sequences
-        self.keep_sequence = True
+        self.keep_sequence = keep_sequences
+        
 
 
 
@@ -321,8 +321,8 @@ class Dataset(Sequence):
         for idx in self.indices:
             #_,mean,_,_ = self.data[idx]
             img = cv2.imread(self.data[idx][0],0)
-            mean = np.mean(img / 255.0)
-            sum_mean += img
+            mean = np.mean(img / 255.0,axis=(0,1))
+            sum_mean += mean
         return sum_mean / len(self.indices)
 
     def getStd(self):
@@ -330,8 +330,8 @@ class Dataset(Sequence):
         for idx in self.indices:
             #_,_,std,_ = self.data[idx]
             img = cv2.imread(self.data[idx][0],0)
-            #std = np.std(img / 255.0)
-            sum_std += img
+            std = np.std(img / 255.0,axis=(0,1))
+            sum_std += std
         return sum_std / (len(self.indices) -1)
 
 
