@@ -53,7 +53,7 @@ def inception_v2(inp,channel,activation="selu"):
 
 
 
-def lstmLayer(inp,filters = [5,5],activation="selu"):
+def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
 
     shape_inp = int_shape(inp)
 
@@ -64,7 +64,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu"):
     lstm_conv = ConvLSTM2D(filters=filters[0], 
                            kernel_size=(3, 3), 
                            activation=activation,
-                           padding='same', 
+                           padding=padding, 
                            return_sequences=True,
                            data_format='channels_last')(lstm_shape)
     
@@ -74,7 +74,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu"):
         lstm_conv = ConvLSTM2D(filters=i, 
                                kernel_size=(3, 3), 
                                activation=activation,
-                               padding='same', 
+                               padding=padding, 
                                return_sequences=True,
                                data_format='channels_last')(lstm_conv)
         
@@ -82,7 +82,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu"):
     lstm_conv = ConvLSTM2D(filters=filters[-1], 
                            kernel_size=(3, 3), 
                            activation=activation,
-                           padding='same', 
+                           padding=padding, 
                            return_sequences=False,
                            data_format='channels_last')(lstm_conv)
     
@@ -195,3 +195,85 @@ def CNN_LSTM_Poisson(input_shape):
     model = Model(inputs=inputs, outputs=output)
 
     return model
+
+
+def CONV_LSTM_SMALL(input_shape):
+    inputs      = Input(shape=input_shape)
+
+    
+    inception_1 = inception_v2(inputs,input_shape[-1])
+    conv_1 = Conv2D(12,kernel_size=(5,5))(inception_1)
+    conv_1 = Conv2D(3,kernel_size=(3,3))(conv_1)
+
+    inception_2 = inception_v2(conv_1,6)
+    inception_2 = inception_v2(inception_2,20)
+    inception_2 = inception_v2(inception_2,6)
+
+    conv_2 = Conv2D(12,kernel_size=(5,5))(inception_2)
+    conv_2 = Conv2D(6,kernel_size=(3,3))(conv_2)
+
+    lstm_conv2 = lstmLayer(conv_2,filters = [6,10,6],padding="valid")
+    inception_3 = inception_v2(lstm_conv2,32)
+    inception_3 = inception_v2(inception_3,32)
+
+
+    inception_1_1 = inception_v2(inception_1,16)
+    conv_1_1 = Conv2D(12,kernel_size=(5,5))(inception_1_1)
+    conv_1_1 = Conv2D(16,kernel_size=(3,3))(conv_1_1)
+
+    inception_1_2 = inception_v2(conv_1_1,16)
+    conv_1_2 = Conv2D(12,kernel_size=(5,5))(inception_1_2)
+    conv_1_2 = Conv2D(16,kernel_size=(3,3))(conv_1_2)
+    inception_1_3 = inception_v2(conv_1_2,16)
+    conv_1_3 = Conv2D(12,kernel_size=(5,5))(inception_1_3)
+    conv_1_3 = Conv2D(12,kernel_size=(3,3))(conv_1_3)
+    conv_1_3 = tf.concat([lstm_conv2,conv_1_3],axis=-1)
+    
+    
+    conc = tf.concat([conv_1_3,inception_3],axis=-1,name="ConcatLayer")
+
+    conv_3 = Conv2D(160,kernel_size=(3,3))(conc)
+    conv_3 = Conv2D(32,kernel_size=(3,3))(conv_3)
+    inception_3 = inception_v2(conv_3,32)
+
+    inception_4 = inception_v2(inception_3,16)
+    conv_4 = Conv2D(8,kernel_size=(5,5))(inception_4)
+    conv_5 = Conv2D(3,kernel_size=(3,3))(conv_4)
+
+    cat = Flatten()(conv_5[:,:,:,:1])
+    count = Flatten()(conv_5[:,:,:,1:2])
+    prob = Flatten()(conv_5[:,:,:,2:])
+    
+    cat      = Dense(128)(cat)
+    count      = Dense(128)(count)
+    prob      = Dense(128)(prob)
+    
+    
+    cat = Dense(32*32,activation="sigmoid")(cat)
+    count = Dense(32*32,activation="selu")(count)
+    prob = Dense(32*32,activation="sigmoid")(prob)
+    
+    cat = tf.keras.layers.Reshape((32,32,1))(cat)
+    count = tf.keras.layers.Reshape((32,32,1))(count)
+    prob = tf.keras.layers.Reshape((32,32,1))(prob)
+ 
+    
+    input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
+
+    #input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
+    output_dist = tfp.layers.DistributionLambda(
+        name="DistributionLayer",
+        make_distribution_fn=lambda t: tfp.distributions.Independent(
+        tfd.Mixture(
+            cat=tfd.Categorical(tf.stack([1-tf.math.sigmoid(t[...,:1]), tf.math.sigmoid(t[...,:1])],axis=-1)),
+            components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
+            tfp.distributions.NegativeBinomial(
+            total_count=tf.math.softplus(t[..., 1:2]), 
+            probs=tf.math.sigmoid(t[..., 2:]) ),])
+        ,name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0 ))
+
+    output = output_dist(input_dist)
+    model = Model(inputs=inputs, outputs=output)
+
+    return model
+    
