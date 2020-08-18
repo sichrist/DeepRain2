@@ -284,8 +284,8 @@ def plotAUC(baseline_dict,lw=2):
         fp.append(base["FP"]/(base["FP"]+base["FN"]))
     sns.set(style="ticks", context="talk")
     sns.set_style("darkgrid")
-    plt.style.use("dark_background")
-    plt.figure()
+    #plt.style.use("dark_background")
+    plt.figure(figsize=(20, 10),dpi=100)
     plt.plot(fp, tp, color='darkorange',
          lw=lw, label='ROC curve ')
     plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
@@ -293,6 +293,149 @@ def plotAUC(baseline_dict,lw=2):
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic example')
+    plt.title('ROC')
     plt.legend(loc="lower right")
     plt.show()
+
+def quantile(prediction,iv = (0,128),cfdi = 0.90):
+    shape = prediction.sample().shape
+    q = np.zeros((*shape[:-1],3),dtype=np.float32)
+    a         = np.arange(iv[0],iv[1])
+        
+    prob = prediction.prob(a)
+    cdf  = np.cumsum(prob,axis=-1)
+    mean = prediction.mean()
+ 
+    intervall = (cdf >= 1 - cfdi) & (cdf <=  cfdi)
+    
+    _,x,y,_ = shape
+    
+    x, y = np.meshgrid(np.arange(0,x),np.arange(0,y), sparse=False, indexing='ij')
+    
+
+    for i in range(shape[1]):
+        for j in range(shape[2]):
+            idcs   = np.where(intervall[0,i,j]==True)[0] 
+            lower  = idcs[0]
+            upper  = idcs[-1]
+            q[0,i,j] = [lower,mean[0,i,j],upper]
+            
+            
+    return q
+
+
+def nBinom(t):
+    
+    return tfp.distributions.Independent(
+                    tfp.distributions.NegativeBinomial(
+                    total_count=tf.math.softplus(t[...,1:2]), \
+                    logits=tf.math.sigmoid(t[...,2:]))
+        ,name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0)
+
+
+
+
+def calculate_quantiles(model,test,max_j=30,dist=nBinom):
+    
+    quantiles = []
+    label     = []
+    #test.on_epoch_end()
+    batch_size = test[0][0].shape[0]
+    length = len(test)
+    for j,(x,y) in enumerate(test):
+        
+        if j >= max_j:
+            return (quantiles,label)
+        
+        print("{}/{}".format(j,length),end="\r")
+        for i in range(batch_size):
+            pred = model(np.array([x[i,:,:,:]]))
+            quantiles.append(quantile(dist(pred)))
+            label.append(y[i,:,:,:])
+            
+        
+        
+            
+    return (quantiles,label)
+
+
+def plotCFDI(q,l):
+    x,y = np.random.randint(low=0,high=q[0].shape[1],size=2)
+    
+    lower = []
+    upper = []
+    mean  = []
+    label = []
+    
+    for i in range(len(q)):
+        lower.append(q[i][0,x,y,0])
+        mean.append(q[i][0,x,y,1])
+        upper.append(q[i][0,x,y,2])
+        label.append(l[i][x,y,0])
+
+    
+    sns.set(style="darkgrid")
+    plt.figure(figsize=(20, 10),dpi=100)
+    fig, ax = plt.subplots(1, 1,figsize=(20, 10),dpi=100, sharex=True)
+    x = np.arange(len(q))
+    ax.plot(x, lower,color='black',label="x >= 0.05",alpha = 0.5)
+    ax.plot(x, upper, color='black',label="0.95 >=x",alpha = 0.5)
+    ax.plot(x, label, color='red',label="True",alpha = 0.5)
+    ax.plot(x, mean, color='blue',label="mean",alpha = 0.5)
+    plt.legend(loc="upper right")
+    ax.fill_between(x, lower, upper, where=upper >= lower, facecolor='green', alpha=0.1,interpolate=True,)
+    ax.set_title('Konfidenzintervall')
+    plt.ylim([0.0, np.max(label)])
+    plt.xlim([0, len(q)])
+
+
+def histogramm(q,l):
+    _,x,y,_ = q[0].shape
+    
+    hist = np.zeros(256)
+    hist_q = hist.copy()
+        
+    for i,d in enumerate(q):
+        label = l[i]
+        label = label.ravel()
+        d = d.reshape(x*y,3)
+        for j in range(x*y):
+            hist[int(label[j])] += 1
+            v = label[j]
+            if d[j][0] <= v and d[j][-1] >= v:
+                hist_q[int(label[j])] += 1
+    return hist,hist_q
+
+
+def plotHist(hist,hist_q):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib import colors
+    from matplotlib.ticker import PercentFormatter
+    sns.set(style="darkgrid")
+    plt.figure(figsize=(20, 10),dpi=100)
+    
+
+    hist_n = hist / hist[1:50].sum()
+    plt.title('Liegt im Quantil')
+    plt.bar(np.arange(1,51),hist_n[1:51],color="red",alpha=0.5,lw=.1,label="True")
+    plt.ylim([0.0, 0.2])
+    plt.xlim([0, 50])
+    plt.xlabel('Label')
+    plt.ylabel('relative Häufigkeit')
+    #plt.show()
+
+    hist_q_n = hist_q / hist[1:50].sum()
+    plt.bar(np.arange(1,51),hist_q_n[1:51],color="blue",alpha=0.5,lw=.1,label="Bereich")
+    plt.ylim([0.0, 0.2])
+    plt.xlim([0, 50])
+    plt.legend(loc="upper right")
+    plt.show()
+
+
+def someStats(hist,hist_q):
+    print("Anzahl an labels           :",hist.sum())
+    print("Anzahl liegt im C-Intervall {} | {:.2f}:".format(hist_q.sum(),hist_q.sum()/hist.sum()))
+    print("\nOhne Regen")
+    print("Anzahl an labels           :",hist[1:].sum())
+    print("Anzahl liegt im C-Intervall: {} | {:.2f}%".format(hist_q[1:].sum(),hist_q[1:].sum()/hist[1:].sum()))
