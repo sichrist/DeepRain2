@@ -1,37 +1,35 @@
 #!/home/simon/anaconda3/envs/DeepRain/bin/python
+
 from tensorflow.keras.optimizers import Adam
-from Models.Unet import Unet,simpleUnet
-from Models.Loss import NLL
-from Models.Distributions import *
-from Models.Utils import *
-from tensorflow.keras.layers import *
 from tensorflow.keras import Sequential, Model
-from Utils.Dataset import getData
-from Utils.transform import cutOut,Normalize
+from tensorflow.keras.layers import *
+import tensorflow as tf
 from tensorflow.keras.callbacks import *
 from tensorflow.keras.models import load_model
 from tensorflow.keras.regularizers import l2
+import tensorflow_probability as tfp
+tfd = tfp.distributions
+from Models.Utils import *
+from Utils.Dataset import getData
+from Utils.transform import cutOut,Normalize,LogBin,LinBin
 import os
-import cv2 as cv
+from Models.Lstm_conv import *
+
 
 physical_devices = tf.config.list_physical_devices('GPU')
 print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-BATCH_SIZE = 40
-DIMENSION = (256,256)
-CHANNELS = 5
+BATCH_SIZE = 50
+DIMENSION = (96,96)
+CHANNELS = 7
 MODELPATH = "./Models_weights"
-MODELNAME = "BigInput_zeroInf_negative_Binomial"
+MODELNAME = "BigInput_30min_categorical_6classes_logScaled"
 
 
-def ZeroInflated_negativ_Binomial(input_shape,
-           n_predictions=1,
-           simpleclassification=None,
-           flatten_output=False,
-           activation_hidden="relu",
-           activation_output="relu"):
+def six_class_categorical(input_shape,
+                          activation_hidden="relu"):
 
 
     inputs = Input(shape=input_shape) 
@@ -73,46 +71,41 @@ def ZeroInflated_negativ_Binomial(input_shape,
     #up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
 
     
-    layer = Conv2D(3, (3, 3), activation="selu")(up01)  # 1 x 64x64
+    layer = Conv2D(1, (7, 7), activation="relu")(up01)  # 1 x 64x64
 
-    cat = Flatten()(layer[:,:,:,:1])
-    count = Flatten()(layer[:,:,:,1:2])
-    prob = Flatten()(layer[:,:,:,2:])
+
+    prob = Flatten()(layer)
     
-    cat      = Dense(128)(cat)
-    count      = Dense(128)(count)
     prob      = Dense(128)(prob)
     
-    
-    cat = Dense(64*64,activation="sigmoid")(cat)
-    count = Dense(64*64,activation="relu")(count)
-    prob = Dense(64*64,activation="sigmoid")(prob)
-    
-    cat = tf.keras.layers.Reshape((64,64,1))(cat)
-    count = tf.keras.layers.Reshape((64,64,1))(count)
-    prob = tf.keras.layers.Reshape((64,64,1))(prob)
 
+    prob = Dense(64*64*7,activation="linear")(prob)
     
-    input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
+    prob = tf.keras.layers.Reshape((64,64,1,7))(prob)
+
+    #prob = tf.nn.softmax(prob,axis=-1)
+    
+    prob = tf.math.softmax(prob,axis=-1)
+    #prob = tf.nn.softmax(tf.math.log(prob),axis=-1)
+    
 
     output_dist = tfp.layers.DistributionLambda(
         name="DistributionLayer",
         make_distribution_fn=lambda t: tfp.distributions.Independent(
-        tfd.Mixture(
-            cat=tfd.Categorical(tf.stack([1-tf.math.sigmoid(t[...,:1]), tf.math.sigmoid(t[...,:1])],axis=-1)),
-            components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
-            tfp.distributions.NegativeBinomial(
-            total_count=tf.math.softplus(t[..., 1:2]), 
-            logits=tf.math.sigmoid(t[..., 2:]) ),])
-        ,name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0 ))
+        tfd.Categorical(logits=tf.math.log(t[...,:,:,:]))
+        #tfd.Categorical(probs = t[...,:,:,:])
+        ,name="categorical",reinterpreted_batch_ndims=0 ))
+    
+    
     
 
-    output = output_dist(input_dist)
+    output = output_dist(prob)
+    
     model = Model(inputs=inputs, outputs=output)
     return model
 
-def getModel(compile_ = True):
 
+def getModel(compile_=True):
     modelpath = MODELPATH
     modelname = MODELNAME
 
@@ -124,28 +117,28 @@ def getModel(compile_ = True):
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
-    x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
-    y_transform = [cutOut([96,160,96,160])]
-    
+    #x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
+    #x_transform = [LogBin()]
+    y_transform = [cutOut([96,160,96,160]),LogBin()]
+    #y_transform = [cutOut([96,160,96,160]),LogBin()]
 
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
                          timeToPred=30,
-                         area_=cutOut([96,160,96,160]),
                          y_transform=y_transform,
                          x_transform=x_transform)
 
 
-    model = ZeroInflated_negativ_Binomial((*DIMENSION,CHANNELS))
+    model = six_class_categorical((*DIMENSION,CHANNELS))
     if compile_ == False:
         return model,modelpath,train,test
 
-    
+    neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     def NLL(y_true, y_hat):
         return -y_hat.log_prob(y_true)
 
     model.compile(loss=NLL,
-                  optimizer=Adam( lr= 1e-3 ))
+                  optimizer=Adam( lr= 1e-4 ))
     model.summary()
 
 
@@ -161,18 +154,17 @@ def getModel(compile_ = True):
 
     return model,checkpoint,modelpath,train,test
 
-
 def train():
+
     modelpath = MODELPATH
     modelname = MODELNAME
 
     model,checkpoint,modelpath,train,test = getModel()
-
     history_path = os.path.join(modelpath,modelname+"_history")
     laststate = getBestState(modelpath,history_path)
     test.setWiggle_off()
 
-    
+
     if laststate:
         epoch = laststate["epoch"]
         model.load_weights(laststate["modelpath"])
@@ -183,7 +175,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 45+epoch,
+                            epochs          = 65+epoch,
                             initial_epoch   = epoch,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
@@ -194,7 +186,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 100,
+                            epochs          = 7,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
 
@@ -203,47 +195,7 @@ def train():
 
 
     saveHistory(history_path,history)
-    plotHistory(history,history_path,title="ZeroInf NegativeBinomial NLL-loss")
+    plotHistory(history,history_path,title="Big Input Categorical 5 classes")
 
 
-
-def eval():
-    #windowname = 'OpenCvFrame'
-    #cv.namedWindow(windowname)
-    #cv.moveWindow(windowname,0,00)
-    modelpath = MODELPATH
-    modelname = MODELNAME
-
-    values = 256
-    ones = np.ones((1,64,64,1),np.float32)
-    value_array = np.repeat(ones,values,axis=-1)
-
-    for i in range(values):
-        value_array[:,:,:,i] *= i
-
-
-    def probs(distribution):
-        prob_array = np.zeros_like(value_array)
-        for i in range(values):
-            prob_array[:,:,:,i:i+1] = distribution.prob(value_array[:,:,:,i:i+1])
-        print(prob_array.argmax(axis=-1).max())
-        return prob_array
-
-    model,checkpoint,modelpath,train,test = getModel()   
-    predictions = []
-    for nbr,(x,y) in enumerate(test):
-        print("{:7d}|{:7d}".format(nbr,len(test)),end="\r")
-
-        for i in range(BATCH_SIZE):
-            pred = model(np.array([x[i,:,:,:]]))
-            p = np.array(pred.mean())
-            #probs(pred)
-            print(y[i,:,:].max(),np.max(pred.cdf(5)) )
-            
-            
-    np.save(os.path.join(modelpath,modelname+"_predictions"),np.array(predictions))
-
-
-
-train()
-#eval()
+#train()

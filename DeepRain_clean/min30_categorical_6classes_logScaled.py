@@ -22,10 +22,10 @@ gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
 BATCH_SIZE = 50
-DIMENSION = (256,256)
+DIMENSION = (96,96)
 CHANNELS = 7
 MODELPATH = "./Models_weights"
-MODELNAME = "BigInput_30min_categorical_6classes_logScaled"
+MODELNAME = "10min_categorical_6classes_logScaled"
 
 
 def six_class_categorical(input_shape,
@@ -76,7 +76,7 @@ def six_class_categorical(input_shape,
 
     prob = Flatten()(layer)
     
-    prob      = Dense(256)(prob)
+    prob      = Dense(128)(prob)
     
 
     prob = Dense(64*64*7,activation="linear")(prob)
@@ -117,14 +117,14 @@ def getModel(compile_=True):
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
-    x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
+    #x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
     #x_transform = [LogBin()]
-    #y_transform = [cutOut([96,160,96,160]),LinBin(56)]
     y_transform = [cutOut([96,160,96,160]),LogBin()]
+    #y_transform = [cutOut([96,160,96,160]),LogBin()]
 
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=30,
+                         timeToPred=10,
                          y_transform=y_transform,
                          x_transform=x_transform)
 
@@ -138,7 +138,7 @@ def getModel(compile_=True):
         return -y_hat.log_prob(y_true)
 
     model.compile(loss=NLL,
-                  optimizer=Adam( lr= 1e-3 ))
+                  optimizer=Adam( lr= 1e-4 ))
     model.summary()
 
 
@@ -186,7 +186,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 10,
+                            epochs          = 100,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
 
@@ -198,4 +198,4 @@ def train():
     plotHistory(history,history_path,title="Big Input Categorical 5 classes")
 
 
-train()
+#train()

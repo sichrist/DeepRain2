@@ -92,6 +92,7 @@ def getData(batch_size,
             split = 0.25,
             y_transform = [],
             x_transform = [],
+            area_ = None,
             sortOut = True,
             keep_sequences = False):
 
@@ -182,8 +183,8 @@ def getData(batch_size,
         os.mkdir(trainFolder)
         os.mkdir(testFolder)
 
-        trainlist = transformImages(train,[transformation],trainFolder)
-        testlist  = transformImages(test ,[transformation],testFolder)
+        trainlist = transformImages(train,[transformation],trainFolder,area=area_)
+        testlist  = transformImages(test ,[transformation],testFolder,area=area_)
 
         trainlist.to_csv(traincsv, index = False, header=True)
         testlist.to_csv(testcsv, index = False, header=True)
@@ -198,7 +199,8 @@ def getData(batch_size,
                     sortOut    = sortOut,
                     y_transform = y_transform,
                     x_transform = x_transform,
-                    keep_sequences = keep_sequences)
+                    keep_sequences = keep_sequences,
+                    area=area)
 
     test = Dataset(batch_size,
                     dimension,
@@ -209,7 +211,8 @@ def getData(batch_size,
                     sortOut    = sortOut,
                     y_transform = y_transform,
                     x_transform = x_transform,
-                    keep_sequences = keep_sequences)
+                    keep_sequences = keep_sequences,
+                    area=area_)
 
     return train,test
 
@@ -228,7 +231,8 @@ class Dataset(Sequence):
                  sortOut = False,
                  y_transform = [],
                  x_transform = [],
-                 keep_sequences = False):
+                 keep_sequences = False,
+                 area = None):
 
         self.batch_size   = batch_size
         self.channels     = channels

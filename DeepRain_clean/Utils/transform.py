@@ -228,7 +228,8 @@ def processes(listOfFiles,savedir,transformations):
 def transformImages(listOfFiles,
                     transformation,
                     savedir,
-                    target=processes):
+                    target=processes,
+                    area = None):
 
     if not os.path.exists(savedir):
         os.mkdir(savedir)
@@ -258,6 +259,8 @@ def transformImages(listOfFiles,
     for i,path in enumerate(newListOfFiles):
         print("Creating CSV file: {:07d}/{}".format(i,len(newListOfFiles)),end="\r")
         img = cv2.imread(path,0)
+        if area is not None:
+            img = area(img)
         data_info.append([path,img.mean(),img.std(),img.max()])
         columns = ["path","mean","std","max"]
 

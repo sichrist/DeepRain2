@@ -19,11 +19,11 @@ print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-BATCH_SIZE = 40
-DIMENSION = (256,256)
+BATCH_SIZE = 150
+DIMENSION = (96,96)
 CHANNELS = 5
 MODELPATH = "./Models_weights"
-MODELNAME = "BigInput_zeroInf_negative_Binomial"
+MODELNAME = "zeroInf_negative_Binomial"
 
 
 def ZeroInflated_negativ_Binomial(input_shape,
@@ -66,23 +66,27 @@ def ZeroInflated_negativ_Binomial(input_shape,
 
 
     up02 = UpSampling2D((2, 2))(up03)           # 60 x 32x32
-    up01 = concatenate([conv02, up02], axis=3)  # 20+60 x 32x32
+    up02 = concatenate([conv02, up02], axis=3)  # 20+60 x 32x32
 
     
-    #up01 = UpSampling2D((2, 2))(up02)           # 80 x 64x64
-    #up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
+    up01 = UpSampling2D((2, 2))(up02)           # 80 x 64x64
+    up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
 
     
-    layer = Conv2D(3, (3, 3), activation="selu")(up01)  # 1 x 64x64
+    layer = Conv2D(6, (3, 3), activation="selu")(up01)  # 1 x 64x64
 
-    cat = Flatten()(layer[:,:,:,:1])
-    count = Flatten()(layer[:,:,:,1:2])
-    prob = Flatten()(layer[:,:,:,2:])
+    cat = Flatten()(layer[:,:,:,:2])
+    count = Flatten()(layer[:,:,:,2:4])
+    prob = Flatten()(layer[:,:,:,4:6])
     
-    cat      = Dense(128)(cat)
-    count      = Dense(128)(count)
-    prob      = Dense(128)(prob)
+    cat      = Dense(512)(cat)
+    count      = Dense(512)(count)
+    prob      = Dense(512)(prob)
     
+    
+    #cat = Dropout(0.25)(cat)
+    #count = Dropout(0.25)(count)
+    #prob = Dropout(0.25)(prob)
     
     cat = Dense(64*64,activation="sigmoid")(cat)
     count = Dense(64*64,activation="relu")(count)
@@ -115,7 +119,6 @@ def getModel(compile_ = True):
 
     modelpath = MODELPATH
     modelname = MODELNAME
-
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
@@ -124,40 +127,36 @@ def getModel(compile_ = True):
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
-    x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
-    y_transform = [cutOut([96,160,96,160])]
-    
 
+    
+    y_transform = [cutOut([16,80,16,80])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=30,
-                         area_=cutOut([96,160,96,160]),
-                         y_transform=y_transform,
-                         x_transform=x_transform)
+                         timeToPred=20,
+                         y_transform=y_transform)
 
+                         #x_transform=x_transform)
 
-    model = ZeroInflated_negativ_Binomial((*DIMENSION,CHANNELS))
+    input_shape = (*DIMENSION,CHANNELS)
+
+    model = ZeroInflated_negativ_Binomial(input_shape=input_shape)
+
     if compile_ == False:
         return model,modelpath,train,test
-
+    neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     
-    def NLL(y_true, y_hat):
-        return -y_hat.log_prob(y_true)
-
-    model.compile(loss=NLL,
-                  optimizer=Adam( lr= 1e-3 ))
+    model.compile(loss=neg_log_likelihood,
+                  optimizer=Adam( lr= 1e-4 ))
     model.summary()
 
-
     modelpath_h5 = os.path.join(modelpath,
-                                modelname+'-{epoch:03d}-{loss:03f}-{val_loss:03f}.h5')
+                            modelname+'-{epoch:03d}-{loss:03f}-{val_loss:03f}.h5')
 
     checkpoint = ModelCheckpoint(modelpath_h5,
                                  verbose=0,
                                  monitor='val_loss',
                                  save_best_only=True,
                                  mode='auto')
-
 
     return model,checkpoint,modelpath,train,test
 
@@ -245,5 +244,5 @@ def eval():
 
 
 
-train()
+#train()
 #eval()
