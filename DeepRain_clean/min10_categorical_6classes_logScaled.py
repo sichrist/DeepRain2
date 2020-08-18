@@ -21,11 +21,11 @@ print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-BATCH_SIZE = 50
+BATCH_SIZE = 200
 DIMENSION = (96,96)
-CHANNELS = 7
+CHANNELS = 5
 MODELPATH = "./Models_weights"
-MODELNAME = "BigInput_30min_categorical_6classes_logScaled"
+MODELNAME = "10min_categorical_7classes_logScaled"
 
 
 def six_class_categorical(input_shape,
@@ -64,11 +64,11 @@ def six_class_categorical(input_shape,
 
 
     up02 = UpSampling2D((2, 2))(up03)           # 60 x 32x32
-    up01 = concatenate([conv02, up02], axis=3)  # 20+60 x 32x32
+    up02 = concatenate([conv02, up02], axis=3)  # 20+60 x 32x32
 
     
-    #up01 = UpSampling2D((2, 2))(up02)           # 80 x 64x64
-    #up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
+    up01 = UpSampling2D((2, 2))(up02)           # 80 x 64x64
+    up01 = concatenate([conv01, up01], axis=3)  # 10+80 x 64x64
 
     
     layer = Conv2D(1, (7, 7), activation="relu")(up01)  # 1 x 64x64
@@ -119,14 +119,13 @@ def getModel(compile_=True):
 
     #x_transform = [Normalize(0.0033127920560417023,0.012673124326485102)]
     #x_transform = [LogBin()]
-    y_transform = [cutOut([96,160,96,160]),LogBin()]
+    y_transform = [cutOut([16,80,16,80]),LogBin()]
     #y_transform = [cutOut([96,160,96,160]),LogBin()]
 
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=30,
-                         y_transform=y_transform,
-                         x_transform=x_transform)
+                         timeToPred=10,
+                         y_transform=y_transform)
 
 
     model = six_class_categorical((*DIMENSION,CHANNELS))
@@ -186,7 +185,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 7,
+                            epochs          = 100,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
 
@@ -195,7 +194,7 @@ def train():
 
 
     saveHistory(history_path,history)
-    plotHistory(history,history_path,title="Big Input Categorical 5 classes")
+    plotHistory(history,history_path,title="10min Categorical 7 classes")
 
 
-#train()
+train()
