@@ -25,7 +25,7 @@ BATCH_SIZE = 200
 DIMENSION = (96,96)
 CHANNELS = 5
 MODELPATH = "./Models_weights"
-MODELNAME = "10min_categorical_7classes_logScaled"
+MODELNAME = "10min_categorical_6classes_logScaled"
 
 
 def six_class_categorical(input_shape,
@@ -197,4 +197,4 @@ def train():
     plotHistory(history,history_path,title="10min Categorical 7 classes")
 
 
-train()
+#train()

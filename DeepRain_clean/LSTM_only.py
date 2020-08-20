@@ -23,15 +23,15 @@ tf.config.experimental.set_memory_growth(gpu[0], True)
 
 BATCH_SIZE = 50
 DIMENSION = (64,64)
-CHANNELS = 6
+CHANNELS = 5
 MODELPATH = "./Models_weights"
-MODELNAME = "30min_small_LSTM_znBinomial"
+MODELNAME = "LSTM_znBinomial_O"
 
 
 def getModel(compile_=True):
     modelpath = MODELPATH
     modelname = MODELNAME
-
+    
     if not os.path.exists(modelpath):
         os.mkdir(modelpath)
 
@@ -56,7 +56,7 @@ def getModel(compile_=True):
 
 
     model.compile(loss=neg_log_likelihood,
-                  optimizer=Adam( lr= 1e-4 ))
+                  optimizer=Adam( lr= 5e-4 ))
     model.summary()
 
 
@@ -112,7 +112,7 @@ def train():
 
 
     saveHistory(history_path,history)
-    plotHistory(history,history_path,title="ZeroInf NegativeBinomial small LSTM")
+    plotHistory(history,history_path,title="ZeroInf NegativeBinomial NLL-loss")
 
 
 train()

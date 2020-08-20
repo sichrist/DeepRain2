@@ -21,6 +21,9 @@ def sleepIfRAMFULL(threshold=75,time_sleep=5):
     if (ram_percent > threshold):
         print("MainThread RAM-usage: {:.2f} .. going to sleep for {}s".format(ram_percent,time_sleep),end="\r")
         sleep(time_sleep)
+        return True
+
+    return False
     
 
 def dist2Classes(p,threshold = 0.5):
@@ -128,6 +131,18 @@ def ZeroInflated_Binomial(t):
         ,name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0 )
 
     
+class Categorical(object):
+    """docstring for ClassName"""
+    def __init__(self,p):
+        super(Categorical, self).__init__()
+        self.p = p
+        
+    def prob(self,value):
+        shape = self.p.shape
+        if value < 0 or value >= shape[-1]:
+            return np.zeros_like(self.p)
+        a = self.p[:,:,:,value] 
+        return a
 
 
 def worker(procNbr, data_path,return_val,dist):
@@ -152,9 +167,8 @@ def worker(procNbr, data_path,return_val,dist):
         y = np.array([data_y.pop()])
         p = np.array([data_p.pop()])
         
-        
         p = dist(p)
-        
+
         for key in threshold_list:
             fptp_dict = get_TP(x[0:,:,:,-1:],y,p,threshold = key/20)
             
@@ -242,7 +256,6 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial,x_transform
                           target = worker, 
                           args = (procCtr,data,returnQueue[procCtr],dist ))
             procCtr +=1
-            
             job.start()
             jobs.append(job)
             data_x = []

@@ -197,4 +197,4 @@ def train():
     plotHistory(history,history_path,title="30min Categorical 7 classes")
 
 
-train()
+#train()

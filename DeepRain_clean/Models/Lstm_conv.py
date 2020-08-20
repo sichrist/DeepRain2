@@ -53,7 +53,7 @@ def inception_v2(inp,channel,activation="selu"):
 
 
 
-def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
+def lstmLayer(inp,filters = [5,5],activation="selu",padding="same",kernel_size=(3,3)):
 
     shape_inp = int_shape(inp)
 
@@ -62,7 +62,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
 
 
     lstm_conv = ConvLSTM2D(filters=filters[0], 
-                           kernel_size=(3, 3), 
+                           kernel_size=kernel_size, 
                            activation=activation,
                            padding=padding, 
                            return_sequences=True,
@@ -72,7 +72,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
 
     for i in filters[1:-1]:
         lstm_conv = ConvLSTM2D(filters=i, 
-                               kernel_size=(3, 3), 
+                               kernel_size=kernel_size, 
                                activation=activation,
                                padding=padding, 
                                return_sequences=True,
@@ -80,7 +80,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
         
 
     lstm_conv = ConvLSTM2D(filters=filters[-1], 
-                           kernel_size=(3, 3), 
+                           kernel_size=kernel_size, 
                            activation=activation,
                            padding=padding, 
                            return_sequences=False,
@@ -90,7 +90,7 @@ def lstmLayer(inp,filters = [5,5],activation="selu",padding="same"):
     return lstm_conv
 
 
-def CNN_LSTM(input_shape):
+def CNN_LSTM(input_shape,output = (64,64)):
     inputs      = Input(shape=input_shape)
     inception_1 = inception_v2(inputs,input_shape[-1])
     lstm_conv1 = lstmLayer(inception_1,filters = [5,5,5])
@@ -115,13 +115,13 @@ def CNN_LSTM(input_shape):
     prob      = Dense(128)(prob)
     
     
-    cat = Dense(64*64,activation="sigmoid")(cat)
-    count = Dense(64*64,activation="selu")(count)
-    prob = Dense(64*64,activation="sigmoid")(prob)
+    cat = Dense(output[0]*output[1],activation="sigmoid")(cat)
+    count = Dense(output[0]*output[1],activation="selu")(count)
+    prob = Dense(output[0]*output[1],activation="sigmoid")(prob)
     
-    cat = tf.keras.layers.Reshape((64,64,1))(cat)
-    count = tf.keras.layers.Reshape((64,64,1))(count)
-    prob = tf.keras.layers.Reshape((64,64,1))(prob)
+    cat = tf.keras.layers.Reshape((*output,1))(cat)
+    count = tf.keras.layers.Reshape((*output,1))(count)
+    prob = tf.keras.layers.Reshape((*output,1))(prob)
  
     
     input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
@@ -277,3 +277,59 @@ def CONV_LSTM_SMALL(input_shape):
 
     return model
     
+
+
+
+def LSTM_O(input_shape,output=(32,32)):
+  inputs      = Input(shape=input_shape)
+
+  inception_1_1 = inception_v2(inputs,input_shape[-1])
+  inception_1_2 = inception_v2(inception_1_1,128)
+  inception_1_3 = inception_v2(inception_1_2,64)
+  inception_1_4 = inception_v2(inception_1_3,32)
+  inception_1_5 = inception_v2(inception_1_4,16)
+  layer_1 = Conv2D(8,kernel_size=(7,7))(inception_1_5)
+
+  inception_2_1 = inception_v1(inputs,input_shape[-1])
+  inception_2_2 = inception_v1(inception_2_1,128)
+  inception_2_3 = inception_v1(inception_2_2,64)
+  inception_2_4 = inception_v1(inception_2_3,32)
+  inception_2_5 = inception_v1(inception_2_4,16)
+  layer_2 = Conv2D(8,kernel_size=(7,7))(inception_2_5)
+
+  layer_3_3= tf.concat([layer_1,layer_2],axis=-1,name="ConcatLayer")
+  inception_3_5 = inception_v2(layer_3_3,16)
+  layer_3 = Conv2D(16,kernel_size=(7,7))(inception_3_5)
+  layer = Conv2D(3,kernel_size=(7,7))(layer_3)
+
+  flat = Flatten()(layer)
+  cat      = Dense(64)(flat)
+  count      = Dense(64)(flat)
+  prob      = Dense(64)(flat)
+  
+  
+  cat = Dense(output[0]*output[1],activation="sigmoid")(cat)
+  count = Dense(output[0]*output[1],activation="selu")(count)
+  prob = Dense(output[0]*output[1],activation="sigmoid")(prob)
+  
+  cat = tf.keras.layers.Reshape((*output,1))(cat)
+  count = tf.keras.layers.Reshape((*output,1))(count)
+  prob = tf.keras.layers.Reshape((*output,1))(prob)
+ 
+    
+  input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
+
+  output_dist = tfp.layers.DistributionLambda(
+      name="DistributionLayer",
+      make_distribution_fn=lambda t: tfp.distributions.Independent(
+      tfd.Mixture(
+          cat=tfd.Categorical(tf.stack([1-tf.math.sigmoid(t[...,:1]), tf.math.sigmoid(t[...,:1])],axis=-1)),
+          components=[tfd.Deterministic(loc=tf.zeros_like(t[...,:1])),
+          tfp.distributions.NegativeBinomial(
+          total_count=tf.math.softplus(t[..., 1:2]), 
+          logits=tf.math.sigmoid(t[..., 2:]) ),])
+      ,name="ZeroInflated_Binomial",reinterpreted_batch_ndims=0 ))
+
+  output = output_dist(input_dist)
+  model = Model(inputs=inputs, outputs=output)
+  return model
