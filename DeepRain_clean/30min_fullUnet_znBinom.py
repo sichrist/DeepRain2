@@ -19,7 +19,7 @@ print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-BATCH_SIZE = 50
+BATCH_SIZE = 100
 DIMENSION = (96,96)
 CHANNELS = 5
 MODELPATH = "./Models_weights"
@@ -30,22 +30,23 @@ def fullUnet_znBinom(input_shape):
 
     inputs,outputs = Unet(input_shape,
         output_dim = 3,
-        down_channels=[64,128,256],
-        bias_regularizer = 0.00,
-        kernel_regularizer = 0.00)
-
+        down_channels=[64,128,256,512],
+        bias_regularizer = 0.01,
+        kernel_regularizer = 0.01)
+    
+    outputs = GaussianDropout(0.25)(outputs)
     cat = Flatten()(outputs[:,:,:,:1])
     count = Flatten()(outputs[:,:,:,1:2])
     prob = Flatten()(outputs[:,:,:,2:])
     
-    cat      = Dense(128)(cat)
-    count      = Dense(128)(count)
-    prob      = Dense(128)(prob)
+    cat      = Dense(256)(cat)
+    count      = Dense(256)(count)
+    prob      = Dense(256)(prob)
     
     
-    cat = Dense(64*64,activation="sigmoid")(cat)
-    count = Dense(64*64,activation="relu")(count)
-    prob = Dense(64*64,activation="sigmoid")(prob)
+    cat = Dense(64*64,activation="linear")(cat)
+    count = Dense(64*64,activation="linear")(count)
+    prob = Dense(64*64,activation="linear")(prob)
     
     cat = tf.keras.layers.Reshape((64,64,1))(cat)
     count = tf.keras.layers.Reshape((64,64,1))(count)
@@ -88,7 +89,7 @@ def getModel(compile_ = True):
     y_transform = [cutOut([16,80,16,80])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=30,
+                         timeToPred=40,
                          y_transform=y_transform)
 
                          #x_transform=x_transform)
@@ -102,7 +103,7 @@ def getModel(compile_ = True):
     neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     
     model.compile(loss=neg_log_likelihood,
-                  optimizer=Adam( lr= 1e-4 ))
+                  optimizer=Adam( lr= 1e-3 ))
     model.summary()
 
     modelpath_h5 = os.path.join(modelpath,

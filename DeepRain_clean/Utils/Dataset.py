@@ -313,7 +313,7 @@ class Dataset(Sequence):
             Y = [self.Y_Processing(i) for i in range(end,end+self.label_Offset)]
 
         
-        #self.Wiggle.draw()
+        self.Wiggle.draw()
         
         return np.array(X),np.array(Y)
 

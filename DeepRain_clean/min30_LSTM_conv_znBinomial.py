@@ -75,7 +75,7 @@ def train():
 
     modelpath = MODELPATH
     modelname = MODELNAME
-
+    model,checkpoint,modelpath,train,test = getModel()
     history_path = os.path.join(modelpath,modelname+"_history")
     laststate = getBestState(modelpath,history_path)
     test.setWiggle_off()
@@ -91,7 +91,7 @@ def train():
         history = model.fit(train,
                             validation_data = test,
                             shuffle         = True,
-                            epochs          = 65+epoch,
+                            epochs          = 15+epoch,
                             initial_epoch   = epoch,
                             batch_size      = BATCH_SIZE,
                             callbacks       = checkpoint)
@@ -114,4 +114,4 @@ def train():
     plotHistory(history,history_path,title="ZeroInf NegativeBinomial NLL-loss")
 
 
-#train()
+train()
