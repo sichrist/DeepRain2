@@ -29,32 +29,41 @@ MODELNAME = "30min_fullUnet_znBinom"
 def fullUnet_znBinom(input_shape):
 
     inputs,outputs = Unet(input_shape,
-        output_dim = 3,
+        output_dim = 1,
         down_channels=[64,128,256,512],
-        bias_regularizer = 0.01,
-        kernel_regularizer = 0.01)
+        bias_regularizer = 0.001,
+        kernel_regularizer = 0.001)
+    outputs = Dropout(0.4)(outputs)
+    #outputs = GaussianDropout(0.25)(outputs)
+    #cat = Flatten()(outputs[:,:,:,:1])
+    #count = Flatten()(outputs[:,:,:,1:2])
+    #prob = Flatten()(outputs[:,:,:,2:])
+    flattenLayer = Flatten()(outputs)
+    cat      = Dense(160)(flattenLayer)#(cat)
+    count      = Dense(160)(flattenLayer)#(count)
+    prob      = Dense(160)(flattenLayer)#(prob)
     
-    outputs = GaussianDropout(0.25)(outputs)
-    cat = Flatten()(outputs[:,:,:,:1])
-    count = Flatten()(outputs[:,:,:,1:2])
-    prob = Flatten()(outputs[:,:,:,2:])
     
-    cat      = Dense(256)(cat)
-    count      = Dense(256)(count)
-    prob      = Dense(256)(prob)
-    
-    
-    cat = Dense(64*64,activation="linear")(cat)
-    count = Dense(64*64,activation="linear")(count)
-    prob = Dense(64*64,activation="linear")(prob)
+    cat = Dense(64*64,activation="sigmoid")(cat)
+    count = Dense(64*64,activation="relu")(count)
+    prob = Dense(64*64,activation="sigmoid")(prob)
     
     cat = tf.keras.layers.Reshape((64,64,1))(cat)
     count = tf.keras.layers.Reshape((64,64,1))(count)
     prob = tf.keras.layers.Reshape((64,64,1))(prob)
-
+    
     
     input_dist= tf.concat([cat,count,prob],axis=-1,name="ConcatLayer")
+    """
+    outputs = Conv2D(16,kernel_size=(7,7))(outputs)
+    outputs = Conv2D(16,kernel_size=(7,7))(outputs)
+    outputs = Conv2D(16,kernel_size=(7,7))(outputs)
+    outputs = Conv2D(16,kernel_size=(7,7))(outputs)
+    outputs = Conv2D(16,kernel_size=(5,5))(outputs)
+    outputs = Conv2D(3,kernel_size=(5,5),activation="linear")(outputs)
+    input_dist = outputs
 
+    """
     output_dist = tfp.layers.DistributionLambda(
         name="DistributionLayer",
         make_distribution_fn=lambda t: tfp.distributions.Independent(
@@ -89,7 +98,7 @@ def getModel(compile_ = True):
     y_transform = [cutOut([16,80,16,80])]
     train,test = getData(BATCH_SIZE,
                          DIMENSION,CHANNELS,
-                         timeToPred=40,
+                         timeToPred=30,
                          y_transform=y_transform)
 
                          #x_transform=x_transform)
@@ -103,7 +112,7 @@ def getModel(compile_ = True):
     neg_log_likelihood = lambda x, rv_x: tf.math.reduce_mean(-rv_x.log_prob(x))
     
     model.compile(loss=neg_log_likelihood,
-                  optimizer=Adam( lr= 1e-3 ))
+                  optimizer=Adam( lr= 5e-4 ))
     model.summary()
 
     modelpath_h5 = os.path.join(modelpath,
