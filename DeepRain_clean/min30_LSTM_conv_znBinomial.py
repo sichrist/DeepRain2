@@ -114,4 +114,4 @@ def train():
     plotHistory(history,history_path,title="ZeroInf NegativeBinomial NLL-loss")
 
 
-train()
+#train()

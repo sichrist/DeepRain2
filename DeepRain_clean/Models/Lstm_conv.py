@@ -284,33 +284,46 @@ def LSTM_O(input_shape,output=(32,32)):
   inputs      = Input(shape=input_shape)
 
   inception_1_1 = inception_v2(inputs,input_shape[-1])
-  inception_1_2 = inception_v2(inception_1_1,128)
-  inception_1_3 = inception_v2(inception_1_2,64)
-  inception_1_4 = inception_v2(inception_1_3,32)
-  inception_1_5 = inception_v2(inception_1_4,16)
-  layer_1 = Conv2D(8,kernel_size=(7,7))(inception_1_5)
+  inception_1_2 = inception_v2(inception_1_1,64)
+  pool_1        = MaxPooling2D((2, 2), strides=(2, 2))(inception_1_1)
+  inception_1_2 = inception_v2(pool_1,5)
 
-  inception_2_1 = inception_v1(inputs,input_shape[-1])
-  inception_2_2 = inception_v1(inception_2_1,128)
-  inception_2_3 = inception_v1(inception_2_2,64)
-  inception_2_4 = inception_v1(inception_2_3,32)
-  inception_2_5 = inception_v1(inception_2_4,16)
-  layer_2 = Conv2D(8,kernel_size=(7,7))(inception_2_5)
 
-  layer_3_3= tf.concat([layer_1,layer_2],axis=-1,name="ConcatLayer")
-  inception_3_5 = inception_v2(layer_3_3,16)
-  layer_3 = Conv2D(16,kernel_size=(7,7))(inception_3_5)
-  layer = Conv2D(3,kernel_size=(7,7))(layer_3)
+  layer_1 = lstmLayer(pool_1,filters = [15,15,10,5],activation="relu",padding="valid")
 
-  flat = Flatten()(layer)
-  cat      = Dense(64)(flat)
-  count      = Dense(64)(flat)
-  prob      = Dense(64)(flat)
+
+  pool_2        = AveragePooling2D((2, 2), strides=(2, 2))(inception_1_2)
+  inception_2_1 = inception_v2(pool_2,5)
+  layer_2 = lstmLayer(inception_2_1,filters = [15,15,10,5],activation="relu",padding="valid")
+
+  layer_2 = Conv2DTranspose(32,(7, 7),padding="valid")(layer_2)
+  layer_2 = Conv2DTranspose(32,(7, 7),padding="valid")(layer_2)
+  layer_2 = Conv2DTranspose(64,(5, 5),padding="valid")(layer_2)
+
+
+  inception_3_1 = inception_v2(layer_2,16)
+  inception_3_2 = inception_v2(layer_1,16)
+
+
+
+
+  layer= tf.concat([inception_3_2,inception_3_1,layer_1,layer_2],axis=-1,name="ConcatLayer")
+  cat = inception_v2(layer,2)
+  prob = inception_v2(layer,2)
+  count = inception_v2(layer,2)
   
-  
-  cat = Dense(output[0]*output[1],activation="sigmoid")(cat)
+
+  prob  = Flatten()(prob)
+  cat   = Flatten()(cat)
+  count = Flatten()(count)
+
+  cat      = Dense(256)(cat)
+  count    = Dense(256)(count)
+  prob     = Dense(256)(prob)
+    
+  cat = Dense(output[0]*output[1],activation="tanh")(cat)
   count = Dense(output[0]*output[1],activation="selu")(count)
-  prob = Dense(output[0]*output[1],activation="sigmoid")(prob)
+  prob = Dense(output[0]*output[1],activation="tanh")(prob)
   
   cat = tf.keras.layers.Reshape((*output,1))(cat)
   count = tf.keras.layers.Reshape((*output,1))(count)
@@ -333,3 +346,50 @@ def LSTM_O(input_shape,output=(32,32)):
   output = output_dist(input_dist)
   model = Model(inputs=inputs, outputs=output)
   return model
+
+
+def CNN_LSTM_categorical(input_shape):
+    inputs      = Input(shape=input_shape)
+    inception_1 = inception_v2(inputs,input_shape[-1])
+    lstm_conv1 = lstmLayer(inception_1,filters = [5,5,5])
+
+    inception_2 = inception_v2(inception_1,16)
+    inception_3 = inception_v2(inception_2,16)
+    inception_4 = inception_v2(inception_3,16)
+    #lstm_conv2 = lstmLayer(inception_4,filters = [3,5,1])
+
+    layer = tf.concat([lstm_conv1,inception_4],axis=-1,name="ConcatLayer")
+    layer = inception_v2(layer,3)
+    layer = Conv2D(3,kernel_size=(7,7))(layer)
+    layer = Conv2D(1,kernel_size=(7,7))(layer)
+
+
+    prob = Flatten()(layer)
+    
+    prob      = Dense(128)(prob)
+    
+
+    prob = Dense(64*64*7,activation="linear")(prob)
+    
+    prob = tf.keras.layers.Reshape((64,64,1,7))(prob)
+
+    #prob = tf.nn.softmax(prob,axis=-1)
+    
+    prob = tf.math.softmax(prob,axis=-1)
+    #prob = tf.nn.softmax(tf.math.log(prob),axis=-1)
+    
+
+    output_dist = tfp.layers.DistributionLambda(
+        name="DistributionLayer",
+        make_distribution_fn=lambda t: tfp.distributions.Independent(
+        tfd.Categorical(logits=tf.math.log(t[...,:,:,:]))
+        #tfd.Categorical(probs = t[...,:,:,:])
+        ,name="categorical",reinterpreted_batch_ndims=0 ))
+    
+    
+    
+
+    output = output_dist(prob)
+    
+    model = Model(inputs=inputs, outputs=output)
+    return model

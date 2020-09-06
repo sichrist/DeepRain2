@@ -21,7 +21,7 @@ print("Num GPUs:", len(physical_devices))
 gpu = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_memory_growth(gpu[0], True)
 
-BATCH_SIZE = 50
+BATCH_SIZE = 100
 DIMENSION = (64,64)
 CHANNELS = 5
 MODELPATH = "./Models_weights"
@@ -48,7 +48,8 @@ def getModel(compile_=True):
                          keep_sequences=False,
                          y_transform=y_transform)
 
-    model = CNN_LSTM((*DIMENSION,CHANNELS),output=(32,32))
+    #model = CNN_LSTM((*DIMENSION,CHANNELS),output=(32,32))
+    model = LSTM_O((*DIMENSION,CHANNELS),output=(32,32))
     if compile_ == False:
         return model,modelpath,train,test
 
@@ -56,7 +57,7 @@ def getModel(compile_=True):
 
 
     model.compile(loss=neg_log_likelihood,
-                  optimizer=Adam( lr= 5e-4 ))
+                  optimizer=Adam( lr= 1e-3 ))
     model.summary()
 
 

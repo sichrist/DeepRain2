@@ -232,7 +232,7 @@ def multiProc_eval(model,test,getFreshSet,dist=ZeroInflated_Binomial,x_transform
         
         
         with tf.device("/cpu:0"):           
-            
+            batch = x.shape[0]
             for i in range(batch_size):
                 if x_transform:
                     new = x[i,:,:,:]
@@ -348,7 +348,7 @@ def nBinom(t):
 
 
 
-def calculate_quantiles(model,test,max_j=30,dist=nBinom):
+def calculate_quantiles(model,test,max_j=30,dist=nBinom,cfdi=0.90):
     
     quantiles = []
     label     = []
@@ -363,7 +363,7 @@ def calculate_quantiles(model,test,max_j=30,dist=nBinom):
         print("{}/{}".format(j,length),end="\r")
         for i in range(batch_size):
             pred = model(np.array([x[i,:,:,:]]))
-            quantiles.append(quantile(dist(pred)))
+            quantiles.append(quantile(dist(pred),cfdi=cfdi))
             label.append(y[i,:,:,:])
             
         
@@ -372,6 +372,46 @@ def calculate_quantiles(model,test,max_j=30,dist=nBinom):
     return (quantiles,label)
 
 
+
+
+def getDist(param,dist,iv=(0,255)):
+    prediction = dist(param)
+    prob = np.array(prediction.sample(255))
+    prob = prob.transpose(1,2,3,4,0)
+    
+    return prob[:,:,:,0,:]
+    
+
+def joyplot(model,test,max_j = 2):
+    y = test[0][1]
+    x_,y_ = np.random.randint(low=0,high=y.shape[1],size=2)
+
+    dists = []
+    time_d  = []
+    x_series = []
+
+    for j,(x,y) in enumerate(test):
+        
+        if j >= max_j:
+            break
+        batch_size = x.shape[0]
+        for i in range(batch_size):
+            pred = model(np.array([x[i,:,:,:]]))
+            d = getDist(pred[:,:,:,1:],nBinom)
+            dists.append(np.array(d[0,x_,y_,:]))
+            x_series.append(np.arange(0,255))
+            
+    import joypy
+    dframe = pd.DataFrame(np.array(dists[:50]).T)
+    fig, axes = joypy.joyplot(dframe,
+                              figsize=(5,10),
+                              linewidth=0.5,
+                              grid='y',
+                              background='k',
+                              x_range=[1,50],
+                              colormap=cm.rainbow)
+
+"""
 def plotCFDI(q,l):
     x,y = np.random.randint(low=0,high=q[0].shape[1],size=2)
     
@@ -398,6 +438,36 @@ def plotCFDI(q,l):
     plt.legend(loc="upper right")
     ax.fill_between(x, lower, upper, where=upper >= lower, facecolor='green', alpha=0.1,interpolate=True,)
     ax.set_title('Konfidenzintervall')
+    plt.ylim([0.0, np.max(label)])
+    plt.xlim([0, len(q)])
+"""
+def plotCFDI(q,l):
+    x,y = np.random.randint(low=0,high=q[0].shape[1],size=2)
+    
+    lower = []
+    upper = []
+    mean  = []
+    label = []
+    
+    for i in range(len(q)):
+        lower.append(q[i][0,x,y,0])
+        mean.append(q[i][0,x,y,1])
+        upper.append(q[i][0,x,y,2])
+        label.append(l[i][x,y,0])
+        
+    x = np.arange(len(lower))
+    
+    sns.set(style="darkgrid")
+    plt.figure(figsize=(20, 10),dpi=100)
+    fig, ax = plt.subplots(1, 1,figsize=(20, 10),dpi=100, sharex=True)
+    
+    ax.plot(x, lower,color='black',label="x >= 0.05",alpha = 0.5)
+    ax.plot(x, upper, color='black',label="0.95 >=x",alpha = 0.5)
+    ax.plot(x, label, color='red',label="True",alpha = 0.5)
+    ax.plot(x, mean, color='blue',label="mean",alpha = 0.5)
+    plt.legend(loc="upper right")
+    ax.fill_between(x, lower, upper, where=upper >= lower, facecolor='green', alpha=0.1,interpolate=True)
+    ax.set_title('Confidenzintervall')
     plt.ylim([0.0, np.max(label)])
     plt.xlim([0, len(q)])
 
